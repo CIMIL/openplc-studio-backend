@@ -2,23 +2,20 @@
 name = "plc-platform-backend"
 version = "0.1.0"
 description = ""
-authors = [
-    {name = "filippodaniotti",email = "febbrosto@gmail.com"}
-]
+authors = [{ name = "filippodaniotti", email = "febbrosto@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-    "fastapi[standard] (>=0.115.6,<0.116.0)",
-    "uvicorn (>=0.34.0,<0.35.0)"
-]
-
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.poetry.dependencies]
+python = ">=3.10"
+fastapi = { version = ">=0.115.6,<0.116.0", extras = ["standard"] }
+uvicorn = { version = ">=0.34.0,<0.35.0" }
+plctestbench = { git = "https://github.com/LucaVignati/plc-testbench.git", branch = "refactor" }
 
 
 [tool.poetry.group.dev.dependencies]
 debugpy = "^1.8.11"
-
