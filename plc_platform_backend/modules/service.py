@@ -7,6 +7,8 @@ from plctestbench.output_analyser import OutputAnalyser
 from plctestbench.plc_algorithm import PLCAlgorithm
 from plctestbench.worker import Worker
 
+from plc_platform_backend.modules.models import ModuleType
+
 
 class ModuleService:
 
@@ -15,7 +17,7 @@ class ModuleService:
         module_settings_cls: type = self.get_module_settings_type(module_cls)
         return self.get_module_settings_params(module_settings_cls)
 
-    def get_modules(self, module_type: str) -> list[str]:
+    def get_modules(self, module_type: ModuleType) -> list[str]:
         return list(self.get_modules_cls(module_type).keys())
 
     def get_module_settings_type(self, module_type: type) -> type:
@@ -34,10 +36,11 @@ class ModuleService:
         }
 
     @lru_cache(maxsize=None, typed=True)
-    def get_modules_cls(self, module_type: str) -> dict[str, type]:
+    def get_modules_cls(self, module_type: ModuleType) -> dict[str, type]:
         module_types: dict[str, type] = self.get_module_types()
         return {
-            cls.__name__: cls for cls in module_types.get(module_type).__subclasses__()
+            cls.__name__: cls
+            for cls in module_types.get(module_type.name).__subclasses__()
         }
 
     @lru_cache(maxsize=None, typed=True)

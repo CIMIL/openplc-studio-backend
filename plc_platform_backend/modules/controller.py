@@ -2,11 +2,12 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 
+from plc_platform_backend.modules.models import ModuleType
 from plc_platform_backend.modules.service import ModuleService
 
 router = APIRouter(
-    prefix="/module",
-    tags=["module"],
+    prefix="/modules",
+    tags=["modules"],
     dependencies=[],
     responses={404: {"description": "Not found"}},
 )
@@ -14,7 +15,7 @@ router = APIRouter(
 
 @router.get("")
 async def get_modules(
-    module_type: str, module_service: Annotated[ModuleService, Depends()]
+    module_type: ModuleType, module_service: Annotated[ModuleService, Depends()]
 ) -> list[str]:
     return module_service.get_modules(module_type)
 
