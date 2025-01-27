@@ -1,8 +1,9 @@
 import inspect
+from enum import Enum
 from functools import lru_cache
-from typing import Any
+import types
+from typing import Any, get_args
 
-from numpy import sign
 from plctestbench.loss_simulator import PacketLossSimulator
 from plctestbench.output_analyser import OutputAnalyser
 from plctestbench.plc_algorithm import PLCAlgorithm
@@ -43,24 +44,55 @@ class ModuleService:
 
     def get_module_settings_params(
         self, module_settings_cls: type
-    ) -> list[dict[str, Any]]:
-        signature = inspect.signature(module_settings_cls.__init__)
+    ) -> list[ModuleParameters]:
+        signature: inspect.Signature = inspect.signature(module_settings_cls.__init__)
 
-        return [
-            {"name": name, "type": param.annotation.__name__, "default": param.default}
-            for name, param in signature.parameters.items()
-            if name != "self"
-        ]
+        constructor_params: list[ModuleParameters] = []
+        for name, param in signature.parameters.items():
+            if name == "self":
+                continue
+
+            available_values: list[Any] = None
+
+            param_type: str = param.annotation.__name__
+
+            param_default: Any = param.default
+
+            try:
+                if issubclass(param.annotation, Enum):
+                    param_type = Enum.__name__
+                    param_default = param_default.value 
+                    available_values = [value.value for value in param.annotation]
+            except Exception as e:
+                print(f"Error processing parameter {param}: {str(e)}")
+
+            if param.annotation.__name__ == "List":
+                inner_type = get_args(param.annotation)[0].__name__
+                param_type = f"{param_type}_{inner_type}"
+
+            constructor_params.append(
+                ModuleParameters(
+                    name=name,
+                    type=param_type,
+                    default=param_default,
+                    available_values=available_values,
+                )
+            )
+        return constructor_params
 
     @lru_cache(maxsize=None, typed=True)
     def get_modules_cls(self, module_type: ModuleType) -> dict[str, type]:
         module_types: dict[str, type] = self.get_module_types()
 
-        return {
-            cls.__name__: cls
-            for cls in module_types.get(module_type.name).__subclasses__()
-        }
+        return self.find_subclasses_rec(module_types.get(module_type.name))
 
     @lru_cache(maxsize=None, typed=True)
     def get_module_types(self) -> dict[str, type]:
         return {cls.__name__: cls for cls in Worker.__subclasses__()}
+
+    def find_subclasses_rec(self, cls: type):
+        subclasses = cls.__subclasses__()
+        module_dict = {cls.__name__: cls for cls in subclasses}
+        for subclass in subclasses:
+            module_dict.update(self.find_subclasses_rec(subclass))
+        return module_dict

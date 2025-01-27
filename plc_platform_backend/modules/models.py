@@ -1,6 +1,7 @@
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
+from matplotlib.style import available
 from pydantic import BaseModel
 
 
@@ -14,6 +15,7 @@ class ModuleParameters(BaseModel):
     name: str
     type: str
     default: Any
+    available_values: Optional[list[Any]]
 
 
 class Module(BaseModel):
