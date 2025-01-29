@@ -1,7 +1,6 @@
 import inspect
 from enum import Enum
 from functools import lru_cache
-import types
 from typing import Any, get_args
 
 from plctestbench.loss_simulator import PacketLossSimulator
@@ -11,6 +10,10 @@ from plctestbench.worker import Worker
 
 from plc_platform_backend.modules.models import Module, ModuleParameters, ModuleType
 
+@lru_cache
+def get_modules_service() -> "ModuleService":
+    _module_service = ModuleService()
+    return _module_service
 
 class ModuleService:
 
@@ -66,7 +69,7 @@ class ModuleService:
             except Exception as e:
                 print(f"Error processing parameter {param}: {str(e)}")
 
-            if param.annotation.__name__ == "List":
+            if param.annotation.__name__ == "list":
                 inner_type = get_args(param.annotation)[0].__name__
                 param_type = f"{param_type}_{inner_type}"
 
