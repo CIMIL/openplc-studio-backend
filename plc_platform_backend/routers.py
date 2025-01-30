@@ -1,1 +1,1 @@
-from .modules import controller as modules
+from .modules import modules_controller as modules

@@ -8,7 +8,7 @@ from plctestbench.output_analyser import OutputAnalyser
 from plctestbench.plc_algorithm import PLCAlgorithm
 from plctestbench.worker import Worker
 
-from plc_platform_backend.modules.models import Module, ModuleParameters, ModuleType
+from plc_platform_backend.modules.modules_models import Module, ModuleParameters, ModuleType
 
 @lru_cache
 def get_modules_service() -> "ModuleService":

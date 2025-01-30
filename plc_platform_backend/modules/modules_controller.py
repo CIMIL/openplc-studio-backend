@@ -2,8 +2,8 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 
-from plc_platform_backend.modules.models import Module, ModuleParameters, ModuleType
-from plc_platform_backend.modules.service import get_modules_service
+from plc_platform_backend.modules.modules_models import Module, ModuleParameters, ModuleType
+from plc_platform_backend.modules.modules_service import get_modules_service
 
 router = APIRouter(
     prefix="/modules",
