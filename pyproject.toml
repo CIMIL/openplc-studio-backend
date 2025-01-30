@@ -15,6 +15,7 @@ python = ">=3.10"
 fastapi = { version = ">=0.115.6,<0.116.0", extras = ["standard"] }
 uvicorn = { version = ">=0.34.0,<0.35.0" }
 plctestbench = { git = "https://github.com/LucaVignati/plc-testbench.git", branch = "refactor" }
+pydantic-settings = "^2.7.1"
 
 
 [tool.poetry.group.dev.dependencies]
