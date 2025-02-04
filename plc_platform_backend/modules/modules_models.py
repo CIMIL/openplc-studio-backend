@@ -15,7 +15,7 @@ class ModuleParameters(BaseModel):
     name: str
     type: str
     default: Any
-    available_values: Optional[list[Any]]
+    values: Optional[list[Any]]
 
 
 class Module(BaseModel):

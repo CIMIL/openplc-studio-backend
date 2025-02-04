@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import modules
+from plc_platform_backend.routers import modules
 
 app = FastAPI()
 

@@ -8,12 +8,18 @@ from plctestbench.output_analyser import OutputAnalyser
 from plctestbench.plc_algorithm import PLCAlgorithm
 from plctestbench.worker import Worker
 
-from plc_platform_backend.modules.modules_models import Module, ModuleParameters, ModuleType
+from plc_platform_backend.modules.modules_models import (
+    Module,
+    ModuleParameters,
+    ModuleType,
+)
+
 
 @lru_cache
 def get_modules_service() -> "ModuleService":
     _module_service = ModuleService()
     return _module_service
+
 
 class ModuleService:
 
@@ -55,7 +61,7 @@ class ModuleService:
             if name == "self":
                 continue
 
-            available_values: list[Any] = None
+            values: list[Any] = None
 
             param_type: str = param.annotation.__name__
 
@@ -64,8 +70,8 @@ class ModuleService:
             try:
                 if issubclass(param.annotation, Enum):
                     param_type = Enum.__name__
-                    param_default = param_default.value 
-                    available_values = [value.value for value in param.annotation]
+                    param_default = param_default.value
+                    values = [value.value for value in param.annotation]
             except Exception as e:
                 print(f"Error processing parameter {param}: {str(e)}")
 
@@ -78,7 +84,7 @@ class ModuleService:
                     name=name,
                     type=param_type,
                     default=param_default,
-                    available_values=available_values,
+                    values=values,
                 )
             )
         return constructor_params
