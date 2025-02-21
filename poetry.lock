@@ -1736,7 +1736,7 @@ typing_inspect = "*"
 type = "git"
 url = "https://github.com/LucaVignati/plc-testbench.git"
 reference = "refactor"
-resolved_reference = "f81ee02faf1561add1e82e21af02cc03269e3ef7"
+resolved_reference = "465aaa6f0f7483852fbe5a20ba88374668cf4372"
 
 [[package]]
 name = "plotly"

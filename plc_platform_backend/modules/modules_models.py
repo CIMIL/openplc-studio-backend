@@ -12,9 +12,10 @@ class ModuleType(str, Enum):
     PacketLossSimulator = "PacketLossSimulator"
     PLCAlgorithm = "PLCAlgorithm"
     OutputAnalyser = "OutputAnalyser"
+    CrossfadeSettings = "CrossfadeSettings"
 
 
-class ModuleParametersDocument(BaseDocument):
+class ModuleParameterDocument(BaseDocument):
     name: str
     type: str
     default: Any
@@ -22,7 +23,7 @@ class ModuleParametersDocument(BaseDocument):
     values: Optional[list[Any]]
 
 
-class ModuleParameters(BaseModel):
+class ModuleParameter(BaseModel):
     name: str
     type: str
     default: Any
@@ -30,8 +31,8 @@ class ModuleParameters(BaseModel):
     values: Optional[list[Any]]
 
     @staticmethod
-    def from_document(document: ModuleParametersDocument) -> ModuleParameters:
-        return ModuleParameters(
+    def from_document(document: ModuleParameterDocument) -> ModuleParameter:
+        return ModuleParameter(
             name=document.name,
             type=document.type,
             default=document.default,
@@ -42,18 +43,18 @@ class ModuleParameters(BaseModel):
 
 class ModuleDocument(BaseDocument):
     name: str
-    settings: list[ModuleParametersDocument]
+    settings: list[ModuleParameterDocument]
 
 
 class Module(BaseModel):
     name: str
-    settings: list[ModuleParameters]
+    settings: list[ModuleParameter]
 
     @staticmethod
     def from_document(document: ModuleDocument) -> Module:
         return Module(
             name=document.name,
             settings=[
-                ModuleParameters.from_document(param) for param in document.settings
+                ModuleParameter.from_document(param) for param in document.settings
             ],
         )

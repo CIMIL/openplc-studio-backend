@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from plc_platform_backend.modules.modules_models import (
     Module,
-    ModuleParameters,
+    ModuleParameter,
     ModuleType,
 )
 from plc_platform_backend.modules.modules_service import (
@@ -33,5 +33,5 @@ async def get_module_parameters(
     module_name: str,
     module_type: ModuleType,
     modules_service: Annotated[ModuleService, Depends(get_modules_service)],
-) -> list[ModuleParameters]:
+) -> list[ModuleParameter]:
     return modules_service.get_module_params(module_name, module_type)
