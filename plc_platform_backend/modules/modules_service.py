@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 from enum import Enum
 from functools import lru_cache
@@ -13,38 +15,49 @@ from plc_platform_backend.modules.modules_models import (
     ModuleParameters,
     ModuleType,
 )
+from plc_platform_backend.modules.modules_repository import (
+    ModulesRepository,
+    get_modules_repository,
+)
 
 
 @lru_cache
-def get_modules_service() -> "ModuleService":
+def get_modules_service() -> ModuleService:
     _module_service = ModuleService()
     return _module_service
 
 
 class ModuleService:
 
+    def __init__(self) -> None:
+        self.modules_repository: ModulesRepository = get_modules_repository()
+
     def get_module_params(
         self, module_name: str, module_type: str
     ) -> list[ModuleParameters]:
-        module_cls: type = self.get_modules_cls(module_type).get(module_name)
+        module_cls: type = self.modules_repository.get_all_modules_cls_by_type(
+            module_type
+        ).get(module_name)
 
         module_settings_cls: type = self.get_module_settings_type(module_cls)
 
         return self.get_module_settings_params(module_settings_cls)
 
-    def get_modules(self, module_type: ModuleType) -> list[Module]:
+    def get_all_modules_by_type(self, module_type: ModuleType) -> list[Module]:
         module_cls: list[tuple[str, type]] = list(
-            self.get_modules_cls(module_type).items()
+            self.modules_repository.get_all_modules_cls_by_type(module_type).items()
         )
 
         module_settings_cls: list[type] = [
             self.get_module_settings_type(cls_type) for _, cls_type in module_cls
         ]
 
-        return [
-            {"name": module, "settings": self.get_module_settings_params(settings)}
+        modules_list: list[Module] = [
+            Module(name=module, settings=self.get_module_settings_params(settings))
             for (module, _), settings in zip(module_cls, module_settings_cls)
         ]
+
+        return modules_list
 
     def get_module_settings_type(self, module_cls: type) -> type:
         return (
@@ -84,24 +97,8 @@ class ModuleService:
                     name=name,
                     type=param_type,
                     default=param_default,
+                    value=param_default,
                     values=values,
                 )
             )
         return constructor_params
-
-    @lru_cache(maxsize=None, typed=True)
-    def get_modules_cls(self, module_type: ModuleType) -> dict[str, type]:
-        module_types: dict[str, type] = self.get_module_types()
-
-        return self.find_subclasses_rec(module_types.get(module_type.name))
-
-    @lru_cache(maxsize=None, typed=True)
-    def get_module_types(self) -> dict[str, type]:
-        return {cls.__name__: cls for cls in Worker.__subclasses__()}
-
-    def find_subclasses_rec(self, cls: type):
-        subclasses = cls.__subclasses__()
-        module_dict = {cls.__name__: cls for cls in subclasses}
-        for subclass in subclasses:
-            module_dict.update(self.find_subclasses_rec(subclass))
-        return module_dict
