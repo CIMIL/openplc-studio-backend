@@ -33,7 +33,7 @@ class ModulesRepository:
 
         for module in all_modules[module_type]:
             parameters: list[ModuleParameter] = [
-                ModuleParameter(**params) for params in module["settings"]
+                ModuleParameter(**params) for params in module.get("settings") or []
             ]
 
             modules.append(Module(name=module["name"], settings=parameters))
