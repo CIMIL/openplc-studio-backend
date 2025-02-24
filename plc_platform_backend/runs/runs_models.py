@@ -18,7 +18,6 @@ class RunStatus(str, Enum):
 class RunDocument(BaseDocument):
     author: str
     name: str
-    packet_size: int
     status: RunStatus = RunStatus.CREATED
     modules: list[Module]
 
@@ -26,7 +25,6 @@ class RunDocument(BaseDocument):
 class Run(BaseModel):
     author: str
     name: str
-    packet_size: int
     status: RunStatus = RunStatus.CREATED
     modules: list[Module]
 

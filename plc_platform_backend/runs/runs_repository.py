@@ -3,9 +3,12 @@ from __future__ import annotations
 from functools import lru_cache
 
 from bson import ObjectId
-from pymongo import MongoClient
 
+from plc_platform_backend.commons.base_mongodb_repository import BaseMongoDBRepository
+from plc_platform_backend.db.db_client import MongoDB, get_mongodb
 from plc_platform_backend.runs.runs_models import Run, RunDocument
+
+COLLECTION_NAME = "runs"
 
 
 @lru_cache
@@ -14,11 +17,9 @@ def get_runs_repository() -> RunsRepository:
     return _module_service
 
 
-class RunsRepository:
-    def __init__(self, db_url: str, db_name: str):
-        self.client = MongoClient(db_url)
-        self.db = self.client[db_name]
-        self.collection = self.db["runs"]
+class RunsRepository(BaseMongoDBRepository):
+    def __init__(self):
+        super().__init__(COLLECTION_NAME)
 
     def create_run(self, run: Run) -> RunDocument:
         run_document = RunDocument(
