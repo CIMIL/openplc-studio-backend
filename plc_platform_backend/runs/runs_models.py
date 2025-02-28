@@ -5,7 +5,7 @@ from enum import Enum
 from pydantic import BaseModel
 
 from plc_platform_backend.commons.base_document import BaseDocument
-from plc_platform_backend.modules.modules_models import Module
+from plc_platform_backend.modules.modules_models import Module, ModuleType
 
 
 class RunStatus(str, Enum):
@@ -19,14 +19,14 @@ class RunDocument(BaseDocument):
     author: str
     name: str
     status: RunStatus = RunStatus.CREATED
-    modules: list[Module]
+    modules: dict[ModuleType, list[Module]]
 
 
 class Run(BaseModel):
     author: str
     name: str
     status: RunStatus = RunStatus.CREATED
-    modules: list[Module]
+    modules: dict[ModuleType, list[Module]]
 
     @staticmethod
     def from_document(document: RunDocument) -> Run:
@@ -34,5 +34,5 @@ class Run(BaseModel):
             author=document.author,
             name=document.name,
             status=document.status,
-            config=document.config,
+            modules=document.modules,
         )

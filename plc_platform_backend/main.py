@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from plc_platform_backend.db import get_mongodb
-from plc_platform_backend.routers import modules
+from plc_platform_backend.routers import modules, runs
 
 
 async def db_setup(app: FastAPI):
@@ -33,3 +33,4 @@ app.add_middleware(
 )
 
 app.include_router(modules.router)
+app.include_router(runs.router)

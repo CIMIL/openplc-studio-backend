@@ -23,7 +23,7 @@ class RunsRepository(BaseMongoDBRepository):
 
     def create_run(self, run: Run) -> RunDocument:
         run_document = RunDocument(
-            author=run.author, name=run.name, status=run.status, config=run.config
+            author=run.author, name=run.name, status=run.status, modules=run.modules
         )
         run_dict = run_document.model_dump()
         self.collection.insert_one(run_dict)
@@ -32,6 +32,10 @@ class RunsRepository(BaseMongoDBRepository):
     def get_run(self, run_id: str) -> RunDocument:
         run_data = self.collection.find_one({"_id": ObjectId(run_id)})
         return RunDocument(**run_data) if run_data else None
+
+    def get_all(self) -> list[RunDocument]:
+        runs_data = self.collection.find()
+        return [RunDocument(**run_data) for run_data in runs_data]
 
     def update_run(self, run_id: str, updated_run: Run) -> bool:
         result = self.collection.update_one(
