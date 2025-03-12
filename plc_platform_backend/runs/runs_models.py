@@ -19,6 +19,7 @@ class RunDocument(BaseDocument):
     author: str
     name: str
     status: RunStatus = RunStatus.CREATED
+    tracks: list[str]
     modules: dict[ModuleType, list[Module]]
 
 
@@ -26,6 +27,7 @@ class Run(BaseModel):
     author: str
     name: str
     status: RunStatus = RunStatus.CREATED
+    tracks: list[str]
     modules: dict[ModuleType, list[Module]]
 
     @staticmethod
@@ -34,5 +36,6 @@ class Run(BaseModel):
             author=document.author,
             name=document.name,
             status=document.status,
+            tracks=document.tracks,
             modules=document.modules,
         )

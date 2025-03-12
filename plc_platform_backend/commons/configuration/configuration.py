@@ -1,4 +1,5 @@
 from functools import lru_cache
+
 from pydantic_settings import BaseSettings
 
 
@@ -6,6 +7,8 @@ from pydantic_settings import BaseSettings
 def get_configuration():
     return Configuration()
 
+
 class Configuration(BaseSettings):
     mongo_initdb_root_username: str
     mongo_initdb_root_password: str
+    plc_root_folder: str
