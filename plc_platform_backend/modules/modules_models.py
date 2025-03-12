@@ -23,38 +23,47 @@ class ModuleParameterDocument(BaseDocument):
     values: Optional[list[Any]]
 
 
-class ModuleParameter(BaseModel):
+class ModuleParameterSpec(BaseModel):
     name: str
     type: str
     default: Any
-    value: Any
     values: Optional[list[Any]]
 
+
+class ModuleParameter(BaseModel):
+    name: str
+    value: Any
+
     @staticmethod
-    def from_document(document: ModuleParameterDocument) -> ModuleParameter:
-        return ModuleParameter(
+    def from_document(document: ModuleParameterDocument) -> ModuleParameterSpec:
+        return ModuleParameterSpec(
             name=document.name,
-            type=document.type,
-            default=document.default,
             value=document.value,
-            values=document.values,
         )
 
 
 class ModuleDocument(BaseDocument):
     name: str
+    testbench_node_id: str
     settings: list[ModuleParameterDocument]
+
+
+class ModuleSpec(BaseModel):
+    name: str
+    settings: list[ModuleParameterSpec]
 
 
 class Module(BaseModel):
     name: str
+    testbench_node_id: Optional[str] = None
     settings: list[ModuleParameter]
 
     @staticmethod
     def from_document(document: ModuleDocument) -> Module:
         return Module(
             name=document.name,
+            testbench_node_id=document.testbench_node_id,
             settings=[
-                ModuleParameter.from_document(param) for param in document.settings
+                (ModuleParameter.from_document(param)) for param in document.settings
             ],
         )

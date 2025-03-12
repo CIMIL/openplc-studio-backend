@@ -4,7 +4,8 @@ from functools import lru_cache
 
 from plc_platform_backend.modules.modules_models import (
     Module,
-    ModuleParameter,
+    ModuleParameterSpec,
+    ModuleSpec,
     ModuleType,
 )
 from plc_platform_backend.modules.modules_repository import (
@@ -24,13 +25,13 @@ class ModuleService:
     def __init__(self) -> None:
         self.modules_repository: ModulesRepository = get_modules_repository()
 
-    def get_all_modules_by_type(self, module_type: ModuleType) -> list[Module]:
+    def get_all_modules_by_type(self, module_type: ModuleType) -> list[ModuleSpec]:
         return self.modules_repository.get_all_modules_by_type(module_type)
 
     def get_module_params(
         self, module_name: str, module_type: ModuleType
-    ) -> list[ModuleParameter]:
-        module: Module = self.get_all_modules_by_type(module_type).get(
+    ) -> list[ModuleParameterSpec]:
+        module: ModuleSpec = self.get_all_modules_by_type(module_type).get(
             module_name, None
         )
 

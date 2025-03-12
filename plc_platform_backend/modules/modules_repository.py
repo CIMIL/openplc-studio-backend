@@ -7,7 +7,8 @@ import plctestbench
 
 from plc_platform_backend.modules.modules_models import (
     Module,
-    ModuleParameter,
+    ModuleParameterSpec,
+    ModuleSpec,
     ModuleType,
 )
 
@@ -26,16 +27,16 @@ class ModulesRepository:
     def get_all_modules(self) -> dict[str, list[dict[str, Any]]]:
         return plctestbench.get_available_modules()
 
-    def get_all_modules_by_type(self, module_type: ModuleType) -> list[Module]:
+    def get_all_modules_by_type(self, module_type: ModuleType) -> list[ModuleSpec]:
         all_modules = self.get_all_modules()
 
-        modules: list[Module] = []
+        modules: list[ModuleSpec] = []
 
         for module in all_modules[module_type]:
-            parameters: list[ModuleParameter] = [
-                ModuleParameter(**params) for params in module.get("settings") or []
+            parameters: list[ModuleParameterSpec] = [
+                ModuleParameterSpec(**params) for params in module.get("settings") or []
             ]
 
-            modules.append(Module(name=module["name"], settings=parameters))
+            modules.append(ModuleSpec(name=module["name"], settings=parameters))
 
         return modules
