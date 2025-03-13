@@ -5,7 +5,6 @@ from functools import lru_cache
 from bson import ObjectId
 
 from plc_platform_backend.commons.base_mongodb_repository import BaseMongoDBRepository
-from plc_platform_backend.db.db_client import MongoDB, get_mongodb
 from plc_platform_backend.runs.runs_models import Run, RunDocument
 
 COLLECTION_NAME = "runs"
@@ -23,7 +22,11 @@ class RunsRepository(BaseMongoDBRepository):
 
     async def create_run(self, run: Run) -> RunDocument:
         run_document = RunDocument(
-            author=run.author, name=run.name, status=run.status, modules=run.modules
+            author=run.author,
+            name=run.name,
+            status=run.status,
+            tracks=run.tracks,
+            modules=run.modules,
         )
 
         run_document = await self.collection.insert_one(

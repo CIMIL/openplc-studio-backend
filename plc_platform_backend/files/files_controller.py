@@ -13,7 +13,10 @@ router = APIRouter(
 )
 
 
-@router.post("")
+@router.post(
+    "",
+    status_code=201,
+)
 async def upload_files(
     files: list[UploadFile],
     files_service: Annotated[FilesService, Depends(get_files_service)],
