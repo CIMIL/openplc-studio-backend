@@ -30,12 +30,14 @@ class FilesRepository:
         return open(path, "rb")
 
     async def get_all_original_track_filenames(self) -> list[str]:
+        tracks_basepath = self.get_original_track_basepath()
         return [
             f
-            for f in os.listdir(self.get_original_track_basepath())
-            if not os.path.isdir(f)
+            for f in os.listdir(tracks_basepath)
+            if os.path.isfile(os.path.join(tracks_basepath, f))
         ]
 
     def get_original_track_basepath(self) -> pathlib.Path:
         root_folder = get_configuration().plc_root_folder
-        return pathlib.Path(root_folder)
+        root_folder = pathlib.Path(root_folder).resolve()
+        return root_folder
