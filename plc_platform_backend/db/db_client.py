@@ -37,5 +37,6 @@ class MongoDB:
         config = get_configuration()
         username = config.mongo_initdb_root_username
         password = config.mongo_initdb_root_password
-        host = "mongo:27017"
-        return f"mongodb://{username}:{password}@{host}"
+        host = "mongo"
+        port = 27017
+        return f"mongodb://{username}:{password}@{host}:{port}"

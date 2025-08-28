@@ -45,9 +45,9 @@ class RunsRepository(BaseMongoDBRepository):
         runs_data = await self.collection.find().to_list(1000)
         return [RunDocument(**run_data) for run_data in runs_data]
 
-    def update_run(self, run_id: str, updated_run: Run) -> bool:
-        result = self.collection.update_one(
-            {"_id": ObjectId(run_id)}, {"$set": updated_run.dict()}
+    async def update_run(self, run_id: str, updated_run: Run) -> bool:
+        result = await self.collection.update_one(
+            {"_id": ObjectId(run_id)}, {"$set": updated_run.model_dump()}
         )
         return result.modified_count > 0
 

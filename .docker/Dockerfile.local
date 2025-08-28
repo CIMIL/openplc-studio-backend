@@ -10,4 +10,6 @@ COPY . .
 
 RUN poetry install --with dev
 
-CMD ["poetry", "run", "python3", "-m", "debugpy", "--listen", "0.0.0.0:5678", "plc_platform_backend/debug.py"]
+RUN chmod u+x .docker/docker-entrypoint.workers.sh
+
+RUN chmod u+x .docker/docker-entrypoint.backend.dev.sh

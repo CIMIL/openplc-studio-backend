@@ -3,7 +3,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from plc_platform_backend.modules.modules_models import (
-    Module,
     ModuleParameterSpec,
     ModuleSpec,
     ModuleType,
