@@ -8,12 +8,12 @@ from plc_platform_backend.commons.configuration.configuration import get_configu
 
 
 @lru_cache
-def get_files_repository() -> FilesRepository:
-    _file_repository = FilesRepository()
+def get_assets_repository() -> AssetsRepository:
+    _file_repository = AssetsRepository()
     return _file_repository
 
 
-class FilesRepository:
+class AssetsRepository:
 
     def __init__(self) -> None:
         pass
