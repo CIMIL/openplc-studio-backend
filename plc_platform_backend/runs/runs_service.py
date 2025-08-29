@@ -6,6 +6,7 @@ import plctestbench.loss_simulator
 import plctestbench.output_analyser
 import plctestbench.plc_algorithm
 from plctestbench.models import DBPlatform, TestbenchConfiguration
+from plctestbench.node import Node
 from plctestbench.plc_testbench import PLCTestbench
 from plctestbench.settings import OriginalAudioSettings
 from plctestbench.worker import OriginalAudio
@@ -68,6 +69,20 @@ async def _launch_run(
         output_analysers,
         service.get_testbench_settings(),
     )
+
+    node_ids: list[Node] = (
+        [n.get_id() for n in testbench.data_manager.get_nodes_by_depth(1)]
+        + [n.get_id() for n in testbench.data_manager.get_nodes_by_depth(2)]
+        + [n.get_id() for n in testbench.data_manager.get_nodes_by_depth(3)]
+    )
+
+    for m, id_ in zip(
+        run.modules[ModuleType.PacketLossSimulator]
+        + run.modules[ModuleType.PLCAlgorithm]
+        + run.modules[ModuleType.OutputAnalyser],
+        node_ids,
+    ):
+        m.testbench_node_id = id_
 
     run.status = RunStatus.RUNNING
     await repository.update_run(run.id, run)
