@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -18,6 +19,7 @@ class RunStatus(str, Enum):
 class RunDocument(BaseDocument):
     author: str
     name: str
+    testbench_internal_id: str
     status: RunStatus = RunStatus.CREATED
     tracks: list[str]
     modules: dict[ModuleType, list[Module]]
@@ -26,6 +28,7 @@ class RunDocument(BaseDocument):
 class Run(BaseModel):
     author: str
     name: str
+    testbench_internal_id: Optional[str]
     status: RunStatus = RunStatus.CREATED
     tracks: list[str]
     modules: dict[ModuleType, list[Module]]
@@ -35,6 +38,7 @@ class Run(BaseModel):
         return Run(
             author=document.author,
             name=document.name,
+            testbench_internal_id=document.testbench_internal_id,
             status=document.status,
             tracks=document.tracks,
             modules=document.modules,

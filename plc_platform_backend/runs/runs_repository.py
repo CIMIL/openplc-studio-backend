@@ -24,6 +24,7 @@ class RunsRepository(BaseMongoDBRepository):
         run_document = RunDocument(
             author=run.author,
             name=run.name,
+            testbench_internal_id=run.testbench_internal_id,
             status=run.status,
             tracks=run.tracks,
             modules=run.modules,

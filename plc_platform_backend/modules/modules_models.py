@@ -44,7 +44,6 @@ class ModuleParameter(BaseModel):
 
 class ModuleDocument(BaseDocument):
     name: str
-    testbench_node_id: str
     settings: list[ModuleParameterDocument]
 
 
@@ -55,14 +54,12 @@ class ModuleSpec(BaseModel):
 
 class Module(BaseModel):
     name: str
-    testbench_node_id: Optional[str] = None
     settings: list[ModuleParameter]
 
     @staticmethod
     def from_document(document: ModuleDocument) -> Module:
         return Module(
             name=document.name,
-            testbench_node_id=document.testbench_node_id,
             settings=[
                 (ModuleParameter.from_document(param)) for param in document.settings
             ],

@@ -1,7 +1,8 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 
+from plc_platform_backend.assets.assets_models import TestbenchNodeDepth
 from plc_platform_backend.runs.runs_models import Run
 from plc_platform_backend.runs.runs_service import RunsService, get_runs_service
 
@@ -30,6 +31,15 @@ async def get_run(
     runs_service: Annotated[RunsService, Depends(get_runs_service)],
 ) -> Run:
     return await runs_service.find_by_id(run_id)
+
+
+@router.get("/{run_id}/assets/{depth}")
+async def get_run_assets_paths(
+    run_id: str,
+    depth: int,
+    runs_service: Annotated[RunsService, Depends(get_runs_service)],
+) -> list[str]:
+    return await runs_service.get_assets_paths(run_id, TestbenchNodeDepth(depth))
 
 
 @router.get("")

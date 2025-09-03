@@ -6,7 +6,6 @@ from typing import Any
 import plctestbench
 
 from plc_platform_backend.modules.modules_models import (
-    Module,
     ModuleParameterSpec,
     ModuleSpec,
     ModuleType,

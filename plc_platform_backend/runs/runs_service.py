@@ -12,6 +12,11 @@ from plctestbench.settings import OriginalAudioSettings
 from plctestbench.worker import OriginalAudio
 
 from plc_platform_backend import actors
+from plc_platform_backend.assets.assets_models import TestbenchNodeDepth
+from plc_platform_backend.assets.assets_repository import (
+    AssetsRepository,
+    get_assets_repository,
+)
 from plc_platform_backend.commons.configuration.configuration import get_configuration
 from plc_platform_backend.modules.modules_models import ModuleType
 from plc_platform_backend.runs.runs_models import Run, RunStatus
@@ -67,24 +72,11 @@ async def _launch_run(
         packet_loss_simulators,
         plc_algorithms,
         output_analysers,
-        service.get_testbench_settings(),
+        service.testbench_settings,
     )
-
-    node_ids: list[Node] = (
-        [n.get_id() for n in testbench.data_manager.get_nodes_by_depth(1)]
-        + [n.get_id() for n in testbench.data_manager.get_nodes_by_depth(2)]
-        + [n.get_id() for n in testbench.data_manager.get_nodes_by_depth(3)]
-    )
-
-    for m, id_ in zip(
-        run.modules[ModuleType.PacketLossSimulator]
-        + run.modules[ModuleType.PLCAlgorithm]
-        + run.modules[ModuleType.OutputAnalyser],
-        node_ids,
-    ):
-        m.testbench_node_id = id_
 
     run.status = RunStatus.RUNNING
+    run.testbench_internal_id = testbench.run_id
     await repository.update_run(run.id, run)
 
     try:
@@ -109,6 +101,8 @@ class RunsService:
 
     def __init__(self) -> None:
         self.runs_repository: RunsRepository = get_runs_repository()
+        self.assets_repository: AssetsRepository = get_assets_repository()
+        self.testbench_settings: TestbenchConfiguration = self.get_testbench_settings()
 
     async def save_run(self, run: Run) -> Run:
         saved_run = await self.runs_repository.create_run(run)
@@ -124,12 +118,24 @@ class RunsService:
     async def launch_run_synch(self, run: Run) -> Run:
         await _launch_run(run, self.runs_repository, self)
 
+    async def get_assets_paths(
+        self, run_id: str, depth: TestbenchNodeDepth
+    ) -> list[str]:
+        run: Run = await self.find_by_id(run_id)
+        return self.assets_repository.get_assets_paths(
+            run, depth, self.testbench_settings
+        )
+
     def get_testbench_settings(self) -> TestbenchConfiguration:
         config = get_configuration()
 
         testbench_settings = TestbenchConfiguration(
             root_folder=config.plc_root_folder,
-            db_platform=DBPlatform.TINYDB,
+            db_platform=DBPlatform.MONGODB,
+            db_ip="mongo",
+            db_port="27017",
+            db_username=config.mongo_initdb_root_username,
+            db_password=config.mongo_initdb_root_password,
         )
 
         return testbench_settings
