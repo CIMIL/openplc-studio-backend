@@ -60,12 +60,15 @@ class AssetsRepository:
 
         nodes: list[Node] = testbench.data_manager.get_nodes_by_depth(depth)
 
-        return [self.resolve_asset_path(f.get_path(), depth) for f in nodes]
+        return [f.get_path() for f in nodes]
 
     def resolve_asset_path(self, stem: str, depth: TestbenchNodeDepth) -> str:
         if depth == TestbenchNodeDepth.SAMPLE_MASKS:
             return f"{stem}.npy"
-        elif depth == TestbenchNodeDepth.RECONSTRUCTED_TRACKS:
+        elif (
+            depth == TestbenchNodeDepth.ORIGINAL_TRACKS
+            or depth == TestbenchNodeDepth.RECONSTRUCTED_TRACKS
+        ):
             return f"{stem}.wav"
         elif depth == TestbenchNodeDepth.OUTPUT_ANALYSIS:
             return f"{stem}.pickle"

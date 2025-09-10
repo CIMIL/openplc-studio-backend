@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import io
+import json
+import os
+import pickle
+import tarfile
+import tempfile
 from functools import lru_cache
 
+import numpy as np
 import plctestbench.loss_simulator
 import plctestbench.output_analyser
 import plctestbench.plc_algorithm
 from plctestbench.models import DBPlatform, TestbenchConfiguration
-from plctestbench.node import Node
+from plctestbench.output_analyser import SimpleCalculatorData
 from plctestbench.plc_testbench import PLCTestbench
 from plctestbench.settings import OriginalAudioSettings
 from plctestbench.worker import OriginalAudio
@@ -118,13 +125,43 @@ class RunsService:
     async def launch_run_synch(self, run: Run) -> Run:
         await _launch_run(run, self.runs_repository, self)
 
-    async def get_assets_paths(
+    async def get_assets_tar_by_depth(
         self, run_id: str, depth: TestbenchNodeDepth
     ) -> list[str]:
         run: Run = await self.find_by_id(run_id)
-        return self.assets_repository.get_assets_paths(
+
+        paths = self.assets_repository.get_assets_paths(
             run, depth, self.testbench_settings
         )
+        paths = [self.assets_repository.resolve_asset_path(p, depth) for p in paths]
+
+        tar_buffer = io.BytesIO()
+
+        with tarfile.open(fileobj=tar_buffer, mode="w") as tar:
+            for p in paths:
+                if not os.path.exists(p):
+                    continue
+
+                if depth == TestbenchNodeDepth.OUTPUT_ANALYSIS:
+                    with open(p, "rb") as pkl:
+                        data: np.ndarray = pickle.load(pkl).get_error()
+
+                    json_data = json.dumps(data.tolist())
+
+                    json_buffer = io.BytesIO(json_data.encode("utf-8"))
+
+                    tarinfo = tarfile.TarInfo(
+                        name=os.path.basename(p).replace(".pickle", ".json")
+                    )
+                    tarinfo.size = len(json_data.encode("utf-8"))
+
+                    tar.addfile(tarinfo, json_buffer)
+
+                else:
+                    tar.add(p, arcname=os.path.basename(p))
+
+        tar_buffer.seek(0)
+        return tar_buffer
 
     def get_testbench_settings(self) -> TestbenchConfiguration:
         config = get_configuration()
