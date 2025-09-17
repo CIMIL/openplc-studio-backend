@@ -24,6 +24,7 @@ from plc_platform_backend.assets.assets_repository import (
     AssetsRepository,
     get_assets_repository,
 )
+from plc_platform_backend.assets.assets_service import AssetsService, get_assets_service
 from plc_platform_backend.commons.configuration.configuration import get_configuration
 from plc_platform_backend.modules.modules_models import ModuleType
 from plc_platform_backend.runs.runs_models import Run, RunStatus
@@ -109,6 +110,7 @@ class RunsService:
     def __init__(self) -> None:
         self.runs_repository: RunsRepository = get_runs_repository()
         self.assets_repository: AssetsRepository = get_assets_repository()
+        self.assets_service: AssetsService = get_assets_service()
         self.testbench_settings: TestbenchConfiguration = self.get_testbench_settings()
 
     async def save_run(self, run: Run) -> Run:
@@ -142,21 +144,13 @@ class RunsService:
                 if not os.path.exists(p):
                     continue
 
-                if depth == TestbenchNodeDepth.OUTPUT_ANALYSIS:
+                if depth == TestbenchNodeDepth.SAMPLE_MASKS:
+                    data: np.ndarray = np.load(p, allow_pickle=True)
+                    tar = self.assets_service.add_json_to_tar(data, tar, p, ".npy")
+                elif depth == TestbenchNodeDepth.OUTPUT_ANALYSIS:
                     with open(p, "rb") as pkl:
                         data: np.ndarray = pickle.load(pkl).get_error()
-
-                    json_data = json.dumps(data.tolist())
-
-                    json_buffer = io.BytesIO(json_data.encode("utf-8"))
-
-                    tarinfo = tarfile.TarInfo(
-                        name=os.path.basename(p).replace(".pickle", ".json")
-                    )
-                    tarinfo.size = len(json_data.encode("utf-8"))
-
-                    tar.addfile(tarinfo, json_buffer)
-
+                    tar = self.assets_service.add_json_to_tar(data, tar, p, ".pickle")
                 else:
                     tar.add(p, arcname=os.path.basename(p))
 
