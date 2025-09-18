@@ -23,3 +23,12 @@ async def upload_assets(
     for file in assets:
         await assets_service.save_file(await file.read(), file.filename)
     return await assets_service.get_all_original_track_filenames()
+
+
+@router.get(
+    "/original-tracks",
+)
+async def get_original_tracks(
+    assets_service: Annotated[AssetsService, Depends(get_assets_service)],
+):
+    return await assets_service.get_all_original_track_filenames()

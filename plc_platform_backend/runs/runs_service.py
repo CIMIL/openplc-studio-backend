@@ -6,6 +6,7 @@ import os
 import pickle
 import tarfile
 import tempfile
+import traceback
 from functools import lru_cache
 
 import numpy as np
@@ -35,7 +36,7 @@ from plc_platform_backend.runs.runs_repository import (
 
 
 async def _launch_run(
-    run: Run, repository: RunsRepository, service: RunsService
+    run: Run, run_repository: RunsRepository, run_service: RunsService
 ) -> None:
     original_audio_tracks = [
         (OriginalAudio, OriginalAudioSettings(track)) for track in run.tracks
@@ -48,7 +49,8 @@ async def _launch_run(
     for module in run.modules[ModuleType.PacketLossSimulator]:
         cls_ = getattr(plctestbench.loss_simulator, module.name)
         settings_cls = getattr(
-            plctestbench.settings, service.get_module_settings_class_name(module.name)
+            plctestbench.settings,
+            run_service.get_module_settings_class_name(module.name),
         )
 
         packet_loss_simulators.append(
@@ -58,7 +60,8 @@ async def _launch_run(
     for module in run.modules[ModuleType.PLCAlgorithm]:
         cls_ = getattr(plctestbench.plc_algorithm, module.name)
         settings_cls = getattr(
-            plctestbench.settings, service.get_module_settings_class_name(module.name)
+            plctestbench.settings,
+            run_service.get_module_settings_class_name(module.name),
         )
 
         plc_algorithms.append(
@@ -68,7 +71,8 @@ async def _launch_run(
     for module in run.modules[ModuleType.OutputAnalyser]:
         cls_ = getattr(plctestbench.output_analyser, module.name)
         settings_cls = getattr(
-            plctestbench.settings, service.get_module_settings_class_name(module.name)
+            plctestbench.settings,
+            run_service.get_module_settings_class_name(module.name),
         )
 
         output_analysers.append(
@@ -80,21 +84,23 @@ async def _launch_run(
         packet_loss_simulators,
         plc_algorithms,
         output_analysers,
-        service.testbench_settings,
+        run_service.testbench_settings,
     )
 
     run.status = RunStatus.RUNNING
     run.testbench_internal_id = testbench.run_id
-    await repository.update_run(run.id, run)
+    await run_repository.update_run(run.id, run)
 
     try:
         testbench.run()
     except Exception as e:
+        traceback.print_exception(e)
         run.status = RunStatus.FAILED
-        await repository.update_run(run.id, run)
+        await run_repository.update_run(run.id, run)
+        return
 
     run.status = RunStatus.COMPLETED
-    await repository.update_run(run.id, run)
+    await run_repository.update_run(run.id, run)
 
     # TODO: notify the frontend that the run is completed
 
@@ -115,7 +121,8 @@ class RunsService:
 
     async def save_run(self, run: Run) -> Run:
         saved_run = await self.runs_repository.create_run(run)
-        actors.launch_run.send(run_id=saved_run.id)
+        # actors.launch_run(run_id=saved_run.id)
+        await self.launch_run_synch(saved_run)
         return Run.from_document(saved_run)
 
     async def find_by_id(self, run_id: str) -> Run:
@@ -139,7 +146,9 @@ class RunsService:
 
         tar_buffer = io.BytesIO()
 
-        with tarfile.open(fileobj=tar_buffer, mode="w") as tar:
+        with tarfile.open(
+            fileobj=tar_buffer, mode="w", format=tarfile.PAX_FORMAT
+        ) as tar:
             for p in paths:
                 if not os.path.exists(p):
                     continue
@@ -152,7 +161,7 @@ class RunsService:
                         data: np.ndarray = pickle.load(pkl).get_error()
                     tar = self.assets_service.add_json_to_tar(data, tar, p, ".pickle")
                 else:
-                    tar.add(p, arcname=os.path.basename(p))
+                    tar.add(p, arcname=self.strip_asset_filenames(p, depth))
 
         tar_buffer.seek(0)
         return tar_buffer
@@ -173,3 +182,18 @@ class RunsService:
 
     def get_module_settings_class_name(self, module: str) -> str:
         return f"{module}Settings"
+
+    def strip_asset_filenames(self, path, depth):
+        items = path.split("/")[2:]
+        print(tuple(items))
+        if depth == TestbenchNodeDepth.ORIGINAL_TRACKS:
+            (original_track,) = tuple(items)
+            return "/".join([original_track])
+        if depth == TestbenchNodeDepth.RECONSTRUCTED_TRACKS:
+            original_track, sample_mask, reconstructed_track = tuple(items)
+            original_track = original_track.split("-")[0]
+            sample_mask = sample_mask.split("-")[0]
+            reconstructed_track = ".".join(
+                [reconstructed_track.split("-")[0], reconstructed_track.split(".")[-1]]
+            )
+            return "/".join([original_track, sample_mask, reconstructed_track])
