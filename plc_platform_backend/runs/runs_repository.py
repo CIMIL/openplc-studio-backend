@@ -5,7 +5,7 @@ from functools import lru_cache
 from bson import ObjectId
 
 from plc_platform_backend.commons.base_mongodb_repository import BaseMongoDBRepository
-from plc_platform_backend.runs.runs_models import Run, RunDocument
+from plc_platform_backend.runs.runs_models import Run, RunCreateDto, RunDocument
 
 COLLECTION_NAME = "runs"
 
@@ -20,7 +20,7 @@ class RunsRepository(BaseMongoDBRepository):
     def __init__(self):
         super().__init__(COLLECTION_NAME)
 
-    async def create_run(self, run: Run) -> RunDocument:
+    async def create_run(self, run: RunCreateDto) -> RunDocument:
         run_document = RunDocument(
             author=run.author,
             name=run.name,

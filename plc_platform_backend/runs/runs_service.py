@@ -28,7 +28,7 @@ from plc_platform_backend.assets.assets_repository import (
 from plc_platform_backend.assets.assets_service import AssetsService, get_assets_service
 from plc_platform_backend.commons.configuration.configuration import get_configuration
 from plc_platform_backend.modules.modules_models import ModuleType
-from plc_platform_backend.runs.runs_models import Run, RunStatus
+from plc_platform_backend.runs.runs_models import Run, RunCreateDto, RunStatus
 from plc_platform_backend.runs.runs_repository import (
     RunsRepository,
     get_runs_repository,
@@ -119,10 +119,10 @@ class RunsService:
         self.assets_service: AssetsService = get_assets_service()
         self.testbench_settings: TestbenchConfiguration = self.get_testbench_settings()
 
-    async def save_run(self, run: Run) -> Run:
+    async def save_run(self, run: RunCreateDto) -> Run:
         saved_run = await self.runs_repository.create_run(run)
-        # actors.launch_run(run_id=saved_run.id)
-        await self.launch_run_synch(saved_run)
+        actors.launch_run(run_id=saved_run.id)
+        # await self.launch_run_synch(saved_run)
         return Run.from_document(saved_run)
 
     async def find_by_id(self, run_id: str) -> Run:

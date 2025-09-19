@@ -25,7 +25,17 @@ class RunDocument(BaseDocument):
     modules: dict[ModuleType, list[Module]]
 
 
+class RunCreateDto(BaseModel):
+    author: str
+    name: str
+    testbench_internal_id: Optional[str]
+    status: RunStatus = RunStatus.CREATED
+    tracks: list[str]
+    modules: dict[ModuleType, list[Module]]
+
+
 class Run(BaseModel):
+    id: str
     author: str
     name: str
     testbench_internal_id: Optional[str]
@@ -36,6 +46,7 @@ class Run(BaseModel):
     @staticmethod
     def from_document(document: RunDocument) -> Run:
         return Run(
+            id=document.id,
             author=document.author,
             name=document.name,
             testbench_internal_id=document.testbench_internal_id,

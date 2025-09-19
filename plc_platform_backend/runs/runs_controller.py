@@ -8,7 +8,7 @@ from fastapi.background import BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
 
 from plc_platform_backend.assets.assets_models import TestbenchNodeDepth
-from plc_platform_backend.runs.runs_models import Run
+from plc_platform_backend.runs.runs_models import Run, RunCreateDto
 from plc_platform_backend.runs.runs_service import RunsService, get_runs_service
 
 router = APIRouter(
@@ -24,7 +24,7 @@ router = APIRouter(
     status_code=201,
 )
 async def create_run(
-    run: Run,
+    run: RunCreateDto,
     runs_service: Annotated[RunsService, Depends(get_runs_service)],
 ) -> Run:
     return await runs_service.save_run(run)
