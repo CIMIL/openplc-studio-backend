@@ -121,7 +121,7 @@ class RunsService:
 
     async def save_run(self, run: RunCreateDto) -> Run:
         saved_run = await self.runs_repository.create_run(run)
-        actors.launch_run(run_id=saved_run.id)
+        actors.launch_run.send(run_id=saved_run.id)
         # await self.launch_run_synch(saved_run)
         return Run.from_document(saved_run)
 

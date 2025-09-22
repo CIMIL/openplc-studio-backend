@@ -1,3 +1,22 @@
+FROM --platform=linux/amd64 debian:12-slim AS peaq-builder
+
+RUN  apt-get update &&  apt-get install -y libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
+    gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x \
+    gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-gtk3 \
+    gstreamer1.0-qt5 gstreamer1.0-pulseaudio \
+    git gtk-doc-tools git2cl automake libtool \
+    build-essential autoconf pkg-config m4
+
+RUN git clone https://github.com/HSU-ANT/gstpeaq.git gstpeaq && \
+    cd gstpeaq && \
+    aclocal && autoheader && ./autogen.sh && \
+    sed -i 's/SUBDIRS = src doc/SUBDIRS = src/' Makefile.am && \
+    ./configure --libdir=/usr/lib && automake && make && make install
+
+
 FROM --platform=linux/amd64 python:3.10-slim
 
 WORKDIR /app/backend
@@ -11,6 +30,18 @@ COPY ./plc-platform-backend ./
 COPY ./plc-testbench ../plc-testbench
 
 RUN poetry install --with dev
+
+RUN  apt-get update &&  apt-get install -y libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
+    gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x \
+    gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-gtk3 \
+    gstreamer1.0-qt5 gstreamer1.0-pulseaudio 
+
+COPY --from=peaq-builder --chmod=755 /usr/lib/gstreamer-1.0/ /usr/lib/gstreamer-1.0/
+
+COPY --from=peaq-builder --chmod=755 /usr/local/bin/peaq /usr/local/bin/peaq
 
 RUN chmod u+x .docker/docker-entrypoint.workers.sh
 
