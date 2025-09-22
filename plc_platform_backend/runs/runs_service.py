@@ -27,7 +27,7 @@ from plc_platform_backend.assets.assets_repository import (
 )
 from plc_platform_backend.assets.assets_service import AssetsService, get_assets_service
 from plc_platform_backend.commons.configuration.configuration import get_configuration
-from plc_platform_backend.modules.modules_models import ModuleType
+from plc_platform_backend.modules.modules_models import ModuleParameter, ModuleType
 from plc_platform_backend.runs.runs_models import Run, RunCreateDto, RunStatus
 from plc_platform_backend.runs.runs_repository import (
     RunsRepository,
@@ -64,8 +64,47 @@ async def _launch_run(
             run_service.get_module_settings_class_name(module.name),
         )
 
+        hydrated_module_settings = []
+        for s in module.settings:
+            crossfade_settings = []
+            fade_in = []
+            if s.name == "crossfade":
+                for xf in s.value:
+                    crossfade_settings_cls = getattr(
+                        plctestbench.settings,
+                        xf["name"],
+                    )
+                    crossfade_settings.append(
+                        crossfade_settings_cls(
+                            **{xfs["name"]: xfs["value"] for xfs in xf["settings"]}
+                        )
+                    )
+                hydrated_module_settings.append(
+                    ModuleParameter(name=s.name, value=crossfade_settings)
+                )
+            elif s.name == "fade_in":
+                for xf in s.value:
+                    crossfade_settings_cls = getattr(
+                        plctestbench.settings,
+                        xf["name"],
+                    )
+                    fade_in.append(
+                        crossfade_settings_cls(
+                            **{xfs["name"]: xfs["value"] for xfs in xf["settings"]}
+                        )
+                    )
+                hydrated_module_settings.append(
+                    ModuleParameter(name=s.name, value=fade_in)
+                )
+            elif s.name == "crossfade_frequencies":
+                pass
+            elif s.name == "crossover_order":
+                pass
+            else:
+                hydrated_module_settings.append(s)
+
         plc_algorithms.append(
-            (cls_, settings_cls(**{s.name: s.value for s in module.settings}))
+            (cls_, settings_cls(**{s.name: s.value for s in hydrated_module_settings}))
         )
 
     for module in run.modules[ModuleType.OutputAnalyser]:
