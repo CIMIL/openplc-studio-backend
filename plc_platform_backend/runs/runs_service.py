@@ -16,7 +16,7 @@ import plctestbench.plc_algorithm
 from plctestbench.models import DBPlatform, TestbenchConfiguration
 from plctestbench.output_analyser import SimpleCalculatorData
 from plctestbench.plc_testbench import PLCTestbench
-from plctestbench.settings import OriginalAudioSettings
+from plctestbench.settings import CrossfadeSettings, OriginalAudioSettings
 from plctestbench.worker import OriginalAudio
 
 from plc_platform_backend import actors
@@ -66,8 +66,9 @@ async def _launch_run(
 
         hydrated_module_settings = []
         for s in module.settings:
-            crossfade_settings = []
-            fade_in = []
+            crossfade_settings: list[CrossfadeSettings] = []
+            fade_in: list[CrossfadeSettings] = []
+            crossfade_frequencies: list[int] = []
             if s.name == "crossfade":
                 for xf in s.value:
                     crossfade_settings_cls = getattr(
@@ -96,10 +97,15 @@ async def _launch_run(
                 hydrated_module_settings.append(
                     ModuleParameter(name=s.name, value=fade_in)
                 )
-            elif s.name == "crossfade_frequencies":
-                pass
-            elif s.name == "crossover_order":
-                pass
+            elif s.name == "crossfade_frequencies" and s.value:
+                crossfade_frequencies = [int(f) for f in s.value]
+                hydrated_module_settings.append(
+                    ModuleParameter(name=s.name, value=crossfade_frequencies)
+                )
+            elif s.name == "crossover_order" and s.value:
+                hydrated_module_settings.append(
+                    ModuleParameter(name=s.name, value=int(s.value))
+                )
             else:
                 hydrated_module_settings.append(s)
 
