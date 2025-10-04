@@ -1,20 +1,20 @@
 from __future__ import annotations
 
 import io
-import json
 import os
 import pickle
 import tarfile
-import tempfile
 import traceback
 from functools import lru_cache
+from typing import Any
 
 import numpy as np
 import plctestbench.loss_simulator
 import plctestbench.output_analyser
 import plctestbench.plc_algorithm
+from plctestbench.file_wrapper import OutputAnalysis
 from plctestbench.models import DBPlatform, TestbenchConfiguration
-from plctestbench.output_analyser import SimpleCalculatorData
+from plctestbench.output_analyser import PEAQData, SimpleCalculatorData
 from plctestbench.plc_testbench import PLCTestbench
 from plctestbench.settings import CrossfadeSettings, OriginalAudioSettings
 from plctestbench.worker import OriginalAudio
@@ -69,6 +69,10 @@ async def _launch_run(
             crossfade_settings: list[CrossfadeSettings] = []
             fade_in: list[CrossfadeSettings] = []
             crossfade_frequencies: list[int] = []
+            advanced_plc_band_settings: dict[
+                str, list[plctestbench.plc_algorithm.PLCAlgorithm]
+            ] = {}
+            advanced_plc_frequencies: dict[str, list[int]] = {}
             if s.name == "crossfade":
                 for xf in s.value:
                     crossfade_settings_cls = getattr(
@@ -105,6 +109,39 @@ async def _launch_run(
             elif s.name == "crossover_order" and s.value:
                 hydrated_module_settings.append(
                     ModuleParameter(name=s.name, value=int(s.value))
+                )
+            elif s.name == "band_settings":
+                for band in ["linked", "mid", "side", "left", "right"]:
+                    if not band in s.value.keys():
+                        continue
+                    advanced_plc_band_settings[band] = []
+                    for algorithm in s.value[band]:
+                        algorithm_settings_cls = getattr(
+                            plctestbench.settings,
+                            run_service.get_module_settings_class_name(
+                                algorithm["name"]
+                            ),
+                        )
+                        advanced_plc_band_settings[band].append(
+                            algorithm_settings_cls(
+                                **{
+                                    as_["name"]: as_["value"]
+                                    for as_ in algorithm["settings"]
+                                }
+                            )
+                        )
+
+                hydrated_module_settings.append(
+                    ModuleParameter(name=s.name, value=advanced_plc_band_settings)
+                )
+            elif s.name == "frequencies":
+                for band in ["linked", "mid", "side", "left", "right"]:
+                    if not band in s.value.keys():
+                        continue
+                    advanced_plc_frequencies[band] = [f for f in s.value[band]]
+
+                hydrated_module_settings.append(
+                    ModuleParameter(name=s.name, value=advanced_plc_frequencies)
                 )
             else:
                 hydrated_module_settings.append(s)
@@ -166,8 +203,8 @@ class RunsService:
 
     async def save_run(self, run: RunCreateDto) -> Run:
         saved_run = await self.runs_repository.create_run(run)
-        actors.launch_run.send(run_id=saved_run.id)
-        # await self.launch_run_synch(saved_run)
+        # actors.launch_run.send(run_id=saved_run.id)
+        await self.launch_run_synch(saved_run)
         return Run.from_document(saved_run)
 
     async def find_by_id(self, run_id: str) -> Run:
@@ -203,7 +240,12 @@ class RunsService:
                     tar = self.assets_service.add_json_to_tar(data, tar, p, ".npy")
                 elif depth == TestbenchNodeDepth.OUTPUT_ANALYSIS:
                     with open(p, "rb") as pkl:
-                        data: np.ndarray = pickle.load(pkl).get_error()
+                        data: OutputAnalysis = pickle.load(pkl)
+                        if isinstance(data, SimpleCalculatorData):
+                            data = data.get_error()
+                        elif isinstance(data, PEAQData):
+                            data = np.array([data.get_di(), data.get_odg()])
+
                     tar = self.assets_service.add_json_to_tar(data, tar, p, ".pickle")
                 else:
                     tar.add(p, arcname=self.strip_asset_filenames(p, depth))
@@ -230,7 +272,6 @@ class RunsService:
 
     def strip_asset_filenames(self, path, depth):
         items = path.split("/")[2:]
-        print(tuple(items))
         if depth == TestbenchNodeDepth.ORIGINAL_TRACKS:
             (original_track,) = tuple(items)
             return "/".join([original_track])

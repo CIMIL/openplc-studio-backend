@@ -35,7 +35,7 @@ class AssetsRepository:
         return [
             f
             for f in os.listdir(tracks_basepath)
-            if os.path.isfile(os.path.join(tracks_basepath, f))
+            if os.path.isfile(os.path.join(tracks_basepath, f)) and f.endswith(".wav")
         ]
 
     def get_root_folder(self) -> pathlib.Path:
