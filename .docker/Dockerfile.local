@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 debian:12-slim AS peaq-builder
+FROM --platform=linux/amd64 debian:11-slim AS peaq-builder
 
 RUN  apt-get update &&  apt-get install -y libgstreamer1.0-dev \
     libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
@@ -37,7 +37,9 @@ RUN  apt-get update &&  apt-get install -y libgstreamer1.0-dev \
     gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
     gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-x \
     gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-gtk3 \
-    gstreamer1.0-qt5 gstreamer1.0-pulseaudio 
+    gstreamer1.0-qt5 gstreamer1.0-pulseaudio \
+    git gtk-doc-tools git2cl automake libtool \
+    build-essential autoconf pkg-config m4
 
 COPY --from=peaq-builder --chmod=755 /usr/lib/gstreamer-1.0/ /usr/lib/gstreamer-1.0/
 
