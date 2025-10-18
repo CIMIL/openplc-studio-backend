@@ -6,7 +6,6 @@ import pickle
 import tarfile
 import traceback
 from functools import lru_cache
-from typing import Any
 
 import numpy as np
 import plctestbench.loss_simulator
@@ -243,6 +242,7 @@ class RunsService:
                         data: OutputAnalysis = pickle.load(pkl)
                         if isinstance(data, SimpleCalculatorData):
                             data = data.get_error()
+                            data = data.T
                         elif isinstance(data, PEAQData):
                             data = np.array([data.get_di(), data.get_odg()])
 
@@ -278,8 +278,5 @@ class RunsService:
         if depth == TestbenchNodeDepth.RECONSTRUCTED_TRACKS:
             original_track, sample_mask, reconstructed_track = tuple(items)
             original_track = original_track.split("-")[0]
-            sample_mask = sample_mask.split("-")[0]
-            reconstructed_track = ".".join(
-                [reconstructed_track.split("-")[0], reconstructed_track.split(".")[-1]]
-            )
+            sample_mask = "-".join(sample_mask.split("-")[:2])
             return "/".join([original_track, sample_mask, reconstructed_track])
