@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import pickle
 import tarfile
@@ -246,7 +247,14 @@ class RunsService:
                         elif isinstance(data, PEAQData):
                             data = np.array([data.get_di(), data.get_odg()])
 
-                    tar = self.assets_service.add_json_to_tar(data, tar, p, ".pickle")
+                    json_data = json.dumps(data.tolist())
+                    json_buffer = io.BytesIO(json_data.encode("utf-8"))
+                    json_filename = p.replace(".pickle", ".json")
+                    tarinfo = tarfile.TarInfo(
+                        name=self.strip_asset_filenames(json_filename, depth)
+                    )
+                    tarinfo.size = len(json_data.encode("utf-8"))
+                    tar.addfile(tarinfo, json_buffer)
                 else:
                     tar.add(p, arcname=self.strip_asset_filenames(p, depth))
 
@@ -280,3 +288,13 @@ class RunsService:
             original_track = original_track.split("-")[0]
             sample_mask = "-".join(sample_mask.split("-")[:2])
             return "/".join([original_track, sample_mask, reconstructed_track])
+        if depth == TestbenchNodeDepth.OUTPUT_ANALYSIS:
+            original_track, sample_mask, reconstructed_track, output_analysis = tuple(
+                items
+            )
+            original_track = original_track.split("-")[0]
+            sample_mask = "-".join(sample_mask.split("-")[:2])
+            reconstructed_track = "-".join(reconstructed_track.split("-")[:2])
+            return "/".join(
+                [original_track, sample_mask, reconstructed_track, output_analysis]
+            )
