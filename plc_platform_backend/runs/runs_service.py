@@ -58,11 +58,39 @@ async def _launch_run(
         )
 
     for module in run.modules[ModuleType.PLCAlgorithm]:
-        cls_ = getattr(plctestbench.plc_algorithm, module.name)
+        cls_ = getattr(plctestbench.plc_algorithm, module.name, None)
         settings_cls = getattr(
             plctestbench.settings,
             run_service.get_module_settings_class_name(module.name),
+            None,
         )
+
+        if cls_ is None:
+            import importlib.util
+            import sys
+            from pathlib import Path
+
+            plugin_file_path = (
+                Path(get_configuration().plugins_folder) / f"{module.name}Algorithm.py"
+            )
+
+            if not plugin_file_path.exists():
+                raise ImportError(f"Plugin file {plugin_file_path} not found")
+
+            spec = importlib.util.spec_from_file_location(
+                f"{module.name}PLCAlgorithm", plugin_file_path
+            )
+            plugin_module = importlib.util.module_from_spec(spec)
+            sys.modules[f"{module.name}PLCAlgorithm"] = plugin_module
+            spec.loader.exec_module(plugin_module)
+
+            cls_ = getattr(plugin_module, module.name)
+
+            settings_cls = getattr(
+                plugin_module,
+                run_service.get_module_settings_class_name(module.name),
+                None,
+            )
 
         hydrated_module_settings = []
         for s in module.settings:

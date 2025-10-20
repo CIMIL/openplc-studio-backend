@@ -12,6 +12,7 @@ class Configuration(BaseSettings):
     mongo_initdb_root_username: str
     mongo_initdb_root_password: str
     plc_root_folder: str
+    plugins_folder: str
     redis_url: str
 
     def validate(self):
@@ -19,6 +20,7 @@ class Configuration(BaseSettings):
             "mongo_initdb_root_username",
             "mongo_initdb_root_password",
             "plc_root_folder",
+            "plugins_folder",
             "redis_url",
         ]:
             value = getattr(self, field_name)

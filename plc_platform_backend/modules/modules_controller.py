@@ -21,7 +21,7 @@ router = APIRouter(
 
 
 @router.get("")
-async def get_modules_spec(
+async def get_modules(
     module_type: ModuleType,
     modules_service: Annotated[ModuleService, Depends(get_modules_service)],
 ) -> list[ModuleSpec]:
