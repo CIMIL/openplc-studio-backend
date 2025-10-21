@@ -71,7 +71,8 @@ async def _launch_run(
             from pathlib import Path
 
             plugin_file_path = (
-                Path(get_configuration().plugins_folder) / f"{module.name}Algorithm.py"
+                Path(get_configuration().plugins_directory)
+                / f"{module.name}Algorithm.py"
             )
 
             if not plugin_file_path.exists():

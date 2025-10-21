@@ -58,7 +58,7 @@ class ModulesRepository:
         return modules
 
     def get_plugin_modules(self):
-        plugins_path = Path(get_configuration().plugins_folder)
+        plugins_path = Path(get_configuration().plugins_directory)
 
         plugins = []
 
