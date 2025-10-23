@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
 from typing import Optional
 
@@ -36,6 +37,8 @@ class RunCreateDto(BaseModel):
 
 class Run(BaseModel):
     id: str
+    created: datetime
+    updated: datetime
     author: str
     name: str
     testbench_internal_id: Optional[str]
@@ -47,6 +50,8 @@ class Run(BaseModel):
     def from_document(document: RunDocument) -> Run:
         return Run(
             id=document.id,
+            created=document.created,
+            updated=document.updated,
             author=document.author,
             name=document.name,
             testbench_internal_id=document.testbench_internal_id,
