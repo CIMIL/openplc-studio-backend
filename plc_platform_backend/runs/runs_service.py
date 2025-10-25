@@ -273,6 +273,7 @@ class RunsService:
                         data: OutputAnalysis = pickle.load(pkl)
                         if isinstance(data, SimpleCalculatorData):
                             data = data.get_error()
+                            data = np.nan_to_num(data, nan=0)
                             data = data.T
                         elif isinstance(data, PEAQData):
                             data = np.array([data.get_di(), data.get_odg()])
