@@ -253,6 +253,7 @@ class RunsService:
         paths = self.assets_repository.get_assets_paths(
             run, depth, self.testbench_settings
         )
+
         paths = [self.assets_repository.resolve_asset_path(p, depth) for p in paths]
 
         tar_buffer = io.BytesIO()

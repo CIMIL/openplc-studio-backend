@@ -17,10 +17,10 @@ router = APIRouter(
     status_code=201,
 )
 async def upload_assets(
-    assets: list[UploadFile],
+    files: list[UploadFile],
     assets_service: Annotated[AssetsService, Depends(get_assets_service)],
 ):
-    for file in assets:
+    for file in files:
         await assets_service.save_file(await file.read(), file.filename)
     return await assets_service.get_all_original_track_filenames()
 
