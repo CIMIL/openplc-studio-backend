@@ -35,6 +35,136 @@ from plc_platform_backend.runs.runs_repository import (
 )
 
 
+def _get_module_parameter(settings, parameter):
+    return [s.value for s in settings if s.name == parameter][0]
+
+
+def _get_hydrated_module_settings(
+    settings: list[ModuleParameter], run_service: RunsService
+):
+    hydrated_module_settings = []
+    for s in settings:
+        crossfade_settings: list[CrossfadeSettings] = []
+        fade_in: list[CrossfadeSettings] = []
+        crossfade_frequencies: list[int] = []
+        advanced_plc_band_settings: dict[
+            str, list[plctestbench.plc_algorithm.PLCAlgorithm]
+        ] = {}
+        advanced_plc_frequencies: dict[str, list[int]] = {}
+        if s.name == "crossfade":
+            for xf in s.value:
+                crossfade_settings_cls = getattr(
+                    plctestbench.settings,
+                    xf["name"],
+                )
+                crossfade_settings.append(
+                    crossfade_settings_cls(
+                        **{xfs["name"]: xfs["value"] for xfs in xf["settings"]}
+                    )
+                )
+            hydrated_module_settings.append(
+                ModuleParameter(name=s.name, value=crossfade_settings)
+            )
+        elif s.name == "fade_in":
+            for xf in s.value:
+                crossfade_settings_cls = getattr(
+                    plctestbench.settings,
+                    xf["name"],
+                )
+                fade_in.append(
+                    crossfade_settings_cls(
+                        **{xfs["name"]: xfs["value"] for xfs in xf["settings"]}
+                    )
+                )
+            hydrated_module_settings.append(ModuleParameter(name=s.name, value=fade_in))
+        elif s.name == "crossfade_frequencies" and s.value:
+            crossfade_frequencies = [int(f) for f in s.value]
+            hydrated_module_settings.append(
+                ModuleParameter(name=s.name, value=crossfade_frequencies)
+            )
+        elif s.name == "crossover_order" and s.value:
+            hydrated_module_settings.append(
+                ModuleParameter(name=s.name, value=int(s.value))
+            )
+        elif s.name == "band_settings":
+            for band in {"linked", "mid", "side", "left", "right"}:
+                if not band in s.value.keys():
+                    continue
+
+                stereo_image_processing = _get_module_parameter(
+                    settings, "stereo_image_processing"
+                )
+                channel_link = _get_module_parameter(settings, "channel_link")
+
+                if stereo_image_processing == "dual_mono" and band not in {
+                    "left",
+                    "right",
+                }:
+                    continue
+
+                if stereo_image_processing == "mid_side" and band not in {
+                    "mid",
+                    "side",
+                }:
+                    continue
+
+                if channel_link and band != "linked":
+                    continue
+
+                advanced_plc_band_settings[band] = []
+                for algorithm in s.value[band]:
+                    algorithm_settings_cls = getattr(
+                        plctestbench.settings,
+                        run_service.get_module_settings_class_name(algorithm["name"]),
+                    )
+                    advanced_plc_band_settings[band].append(
+                        algorithm_settings_cls(
+                            **{
+                                as_["name"]: as_["value"]
+                                for as_ in algorithm["settings"]
+                            }
+                        )
+                    )
+
+            hydrated_module_settings.append(
+                ModuleParameter(name=s.name, value=advanced_plc_band_settings)
+            )
+        elif s.name == "frequencies":
+            for band in ["linked", "mid", "side", "left", "right"]:
+                if not band in s.value.keys():
+                    continue
+
+                stereo_image_processing = _get_module_parameter(
+                    settings, "stereo_image_processing"
+                )
+                channel_link = _get_module_parameter(settings, "channel_link")
+
+                if stereo_image_processing == "dual_mono" and band not in {
+                    "left",
+                    "right",
+                }:
+                    continue
+
+                if stereo_image_processing == "mid_side" and band not in {
+                    "mid",
+                    "side",
+                }:
+                    continue
+
+                if channel_link and band != "linked":
+                    continue
+
+                advanced_plc_frequencies[band] = [f for f in s.value[band]]
+
+            hydrated_module_settings.append(
+                ModuleParameter(name=s.name, value=advanced_plc_frequencies)
+            )
+        else:
+            hydrated_module_settings.append(s)
+
+    return hydrated_module_settings
+
+
 async def _launch_run(
     run: Run, run_repository: RunsRepository, run_service: RunsService
 ) -> None:
@@ -93,87 +223,9 @@ async def _launch_run(
                 None,
             )
 
-        hydrated_module_settings = []
-        for s in module.settings:
-            crossfade_settings: list[CrossfadeSettings] = []
-            fade_in: list[CrossfadeSettings] = []
-            crossfade_frequencies: list[int] = []
-            advanced_plc_band_settings: dict[
-                str, list[plctestbench.plc_algorithm.PLCAlgorithm]
-            ] = {}
-            advanced_plc_frequencies: dict[str, list[int]] = {}
-            if s.name == "crossfade":
-                for xf in s.value:
-                    crossfade_settings_cls = getattr(
-                        plctestbench.settings,
-                        xf["name"],
-                    )
-                    crossfade_settings.append(
-                        crossfade_settings_cls(
-                            **{xfs["name"]: xfs["value"] for xfs in xf["settings"]}
-                        )
-                    )
-                hydrated_module_settings.append(
-                    ModuleParameter(name=s.name, value=crossfade_settings)
-                )
-            elif s.name == "fade_in":
-                for xf in s.value:
-                    crossfade_settings_cls = getattr(
-                        plctestbench.settings,
-                        xf["name"],
-                    )
-                    fade_in.append(
-                        crossfade_settings_cls(
-                            **{xfs["name"]: xfs["value"] for xfs in xf["settings"]}
-                        )
-                    )
-                hydrated_module_settings.append(
-                    ModuleParameter(name=s.name, value=fade_in)
-                )
-            elif s.name == "crossfade_frequencies" and s.value:
-                crossfade_frequencies = [int(f) for f in s.value]
-                hydrated_module_settings.append(
-                    ModuleParameter(name=s.name, value=crossfade_frequencies)
-                )
-            elif s.name == "crossover_order" and s.value:
-                hydrated_module_settings.append(
-                    ModuleParameter(name=s.name, value=int(s.value))
-                )
-            elif s.name == "band_settings":
-                for band in ["linked", "mid", "side", "left", "right"]:
-                    if not band in s.value.keys():
-                        continue
-                    advanced_plc_band_settings[band] = []
-                    for algorithm in s.value[band]:
-                        algorithm_settings_cls = getattr(
-                            plctestbench.settings,
-                            run_service.get_module_settings_class_name(
-                                algorithm["name"]
-                            ),
-                        )
-                        advanced_plc_band_settings[band].append(
-                            algorithm_settings_cls(
-                                **{
-                                    as_["name"]: as_["value"]
-                                    for as_ in algorithm["settings"]
-                                }
-                            )
-                        )
-
-                hydrated_module_settings.append(
-                    ModuleParameter(name=s.name, value=advanced_plc_band_settings)
-                )
-            elif s.name == "frequencies":
-                for band in ["linked", "mid", "side", "left", "right"]:
-                    if not band in s.value.keys():
-                        continue
-                    advanced_plc_frequencies[band] = [f for f in s.value[band]]
-
-                hydrated_module_settings.append(
-                    ModuleParameter(name=s.name, value=advanced_plc_frequencies)
-                )
-            else:
-                hydrated_module_settings.append(s)
+        hydrated_module_settings = _get_hydrated_module_settings(
+            module.settings, run_service
+        )
 
         plc_algorithms.append(
             (cls_, settings_cls(**{s.name: s.value for s in hydrated_module_settings}))
@@ -232,8 +284,8 @@ class RunsService:
 
     async def save_run(self, run: RunCreateDto) -> Run:
         saved_run = await self.runs_repository.create_run(run)
-        # actors.launch_run.send(run_id=saved_run.id)
-        await self.launch_run_synch(saved_run)
+        actors.launch_run.send(run_id=saved_run.id)
+        # await self.launch_run_synch(saved_run)
         return Run.from_document(saved_run)
 
     async def find_by_id(self, run_id: str) -> Run:
