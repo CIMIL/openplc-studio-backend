@@ -18,6 +18,7 @@ from plctestbench.output_analyser import PEAQData, SimpleCalculatorData
 from plctestbench.plc_testbench import PLCTestbench
 from plctestbench.settings import CrossfadeSettings, OriginalAudioSettings
 from plctestbench.worker import OriginalAudio
+from redis import Redis
 
 from plc_platform_backend import actors
 from plc_platform_backend.assets.assets_models import TestbenchNodeDepth
@@ -27,12 +28,19 @@ from plc_platform_backend.assets.assets_repository import (
 )
 from plc_platform_backend.assets.assets_service import AssetsService, get_assets_service
 from plc_platform_backend.commons.configuration.configuration import get_configuration
+from plc_platform_backend.commons.redis_client import get_redis_client
 from plc_platform_backend.modules.modules_models import ModuleParameter, ModuleType
 from plc_platform_backend.runs.runs_models import Run, RunCreateDto, RunStatus
 from plc_platform_backend.runs.runs_repository import (
     RunsRepository,
     get_runs_repository,
 )
+
+import redis.asyncio as aioredis
+from plc_platform_backend.runs.runs_messages import RunCompletionMessage
+
+RUN_COMPLETION_CHANNEL = "run.complete"
+
 
 
 def _get_module_parameter(settings, parameter):
@@ -159,9 +167,18 @@ def _get_hydrated_module_settings(
 
     return hydrated_module_settings
 
+async def _publish_run_completion(run_name: str, success: bool) -> None:
+    config = get_configuration()
+    redis_client = aioredis.from_url(config.redis_url)
+    message = RunCompletionMessage(run_name=run_name, success=success)
+    await redis_client.publish(RUN_COMPLETION_CHANNEL, message.json())
+    await redis_client.close()
 
 async def _launch_run(
-    run: Run, run_repository: RunsRepository, run_service: RunsService
+    run: Run,
+    run_repository: RunsRepository,
+    run_service: RunsService,
+    redis_client: Redis,
 ) -> None:
     original_audio_tracks = [
         (OriginalAudio, OriginalAudioSettings(track)) for track in run.tracks
@@ -255,12 +272,14 @@ async def _launch_run(
         traceback.print_exception(e)
         run.status = RunStatus.FAILED
         await run_repository.update_run(run.id, run)
+        await _publish_run_completion(run.name, success=False)
         return
 
     run.status = RunStatus.COMPLETED
     await run_repository.update_run(run.id, run)
+    await _publish_run_completion(run.name, success=True)
 
-    # TODO: notify the frontend that the run is completed
+   
 
 
 @lru_cache
@@ -276,6 +295,7 @@ class RunsService:
         self.assets_repository: AssetsRepository = get_assets_repository()
         self.assets_service: AssetsService = get_assets_service()
         self.testbench_settings: TestbenchConfiguration = self.get_testbench_settings()
+        self.redis_client: Redis = get_redis_client()
 
     async def save_run(self, run: RunCreateDto) -> Run:
         saved_run = await self.runs_repository.create_run(run)
@@ -290,7 +310,7 @@ class RunsService:
         return [Run.from_document(run) for run in await self.runs_repository.get_all()]
 
     async def launch_run_synch(self, run: Run) -> Run:
-        await _launch_run(run, self.runs_repository, self)
+        await _launch_run(run, self.runs_repository, self, self.redis_client)
 
     async def get_assets_tar_by_depth(
         self, run_id: str, depth: TestbenchNodeDepth
