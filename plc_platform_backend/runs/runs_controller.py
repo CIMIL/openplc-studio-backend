@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from plc_platform_backend.assets.assets_models import TestbenchNodeDepth
 from plc_platform_backend.runs.runs_models import Run, RunCreateDto
 from plc_platform_backend.runs.runs_service import RunsService, get_runs_service
+from plc_platform_backend.runs.runs_models import Run, RunCreateDto, RunConfigDto, RunConfigValidationError
 
 router = APIRouter(
     prefix="/runs",
@@ -36,6 +37,18 @@ async def get_run(
     runs_service: Annotated[RunsService, Depends(get_runs_service)],
 ) -> Run:
     return await runs_service.find_by_id(run_id)
+
+@router.get("/{run_id}/config/export")
+async def export_run_config(
+    run_id: str,
+    runs_service: Annotated[RunsService, Depends(get_runs_service)],
+) -> StreamingResponse:
+    config_json: str = await runs_service.export_run_config(run_id)
+    return StreamingResponse(
+        io.BytesIO(config_json.encode("utf-8")),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename=run_{run_id}_config.json"},
+    )
 
 
 @router.get("/{run_id}/assets/{depth}")
@@ -69,3 +82,13 @@ async def get_all_runs(
     runs_service: Annotated[RunsService, Depends(get_runs_service)],
 ) -> list[Run]:
     return await runs_service.get_all()
+
+
+
+#controller for validating run config
+@router.post("/config/validate")
+async def validate_run_config(
+    config: RunConfigDto,
+    runs_service: Annotated[RunsService, Depends(get_runs_service)],
+) -> RunConfigDto:
+    return await runs_service.validate_run_config(config)
