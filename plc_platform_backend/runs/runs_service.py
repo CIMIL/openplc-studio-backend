@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import os
 import pickle
 import tarfile
+import threading
 import traceback
 from functools import lru_cache
 
@@ -12,6 +14,7 @@ import numpy as np
 import plctestbench.loss_simulator
 import plctestbench.output_analyser
 import plctestbench.plc_algorithm
+import redis.asyncio as aioredis
 from plctestbench.file_wrapper import OutputAnalysis
 from plctestbench.models import DBPlatform, TestbenchConfiguration
 from plctestbench.output_analyser import PEAQData, SimpleCalculatorData
@@ -28,20 +31,48 @@ from plc_platform_backend.assets.assets_repository import (
 )
 from plc_platform_backend.assets.assets_service import AssetsService, get_assets_service
 from plc_platform_backend.commons.configuration.configuration import get_configuration
+from plc_platform_backend.commons.interceptable_tqdm import InterceptableTqdm
 from plc_platform_backend.commons.redis_client import get_redis_client
 from plc_platform_backend.modules.modules_models import ModuleParameter, ModuleType
-from plc_platform_backend.runs.runs_models import Run, RunCreateDto, RunStatus
+from plc_platform_backend.runs.runs_models import (
+    NodeProgress,
+    Run,
+    RunCompletionMessage,
+    RunCreateDto,
+    RunProgressMessage,
+    RunStatus,
+)
 from plc_platform_backend.runs.runs_repository import (
     RunsRepository,
     get_runs_repository,
 )
+from plc_platform_backend.runs.runs_ws import (
+    RUN_COMPLETION_CHANNEL,
+    RUN_PROGRESS_CHANNEL,
+)
 
-import redis.asyncio as aioredis
-from plc_platform_backend.runs.runs_messages import RunCompletionMessage
-
-RUN_COMPLETION_CHANNEL = "run.complete"
+_PROGRESS_POLL_INTERVAL = 0.1
 
 
+def _seed_progress_state(testbench: PLCTestbench) -> dict[str, NodeProgress]:
+    """
+    Walks every node of every tree in the run and seeds an entry for it,
+    so nodes that haven't started yet (and nodes that finish between two
+    polls) still show up in every RunProgressMessage.
+    """
+    progress_state: dict[str, NodeProgress] = {}
+    for root_node in testbench.data_manager.root_nodes:
+        levels = testbench.get_nodes_by_depth(root_node)
+        for nodes in levels.values():
+            for node in nodes:
+                node_id = node.get_id()
+                progress_state[node_id] = NodeProgress(
+                    description=str(node.get_worker()),
+                    node_id=node_id,
+                    current=0,
+                    total=None,
+                )
+    return progress_state
 
 def _get_module_parameter(settings, parameter):
     return [s.value for s in settings if s.name == parameter][0]
@@ -119,13 +150,18 @@ def _get_hydrated_module_settings(
                         run_service.get_module_settings_class_name(algorithm["name"]),
                     )
                     hydrated_algorithm_settings = _get_hydrated_module_settings(
-                        [ModuleParameter(name=as_["name"], value=as_["value"])
-                        for as_ in algorithm["settings"]],
-                        run_service
+                        [
+                            ModuleParameter(name=as_["name"], value=as_["value"])
+                            for as_ in algorithm["settings"]
+                        ],
+                        run_service,
                     )
                     advanced_plc_band_settings[band].append(
                         algorithm_settings_cls(
-                            **{has.name: has.value for has in hydrated_algorithm_settings}
+                            **{
+                                has.name: has.value
+                                for has in hydrated_algorithm_settings
+                            }
                         )
                     )
 
@@ -167,12 +203,19 @@ def _get_hydrated_module_settings(
 
     return hydrated_module_settings
 
-async def _publish_run_completion(run_name: str, success: bool) -> None:
-    config = get_configuration()
-    redis_client = aioredis.from_url(config.redis_url)
-    message = RunCompletionMessage(run_name=run_name, success=success)
-    await redis_client.publish(RUN_COMPLETION_CHANNEL, message.json())
-    await redis_client.close()
+async def _publish_run_completion(
+    run_id: str, run_name: str, success: bool, redis_client: aioredis.Redis
+) -> None:
+    message = RunCompletionMessage(run_id=run_id, run_name=run_name, success=success)
+    await redis_client.publish(RUN_COMPLETION_CHANNEL, message.model_dump_json())
+
+
+async def _publish_run_progress(
+    run_id: str, run_name: str, nodes: list[NodeProgress], redis_client: aioredis.Redis
+) -> None:
+    message = RunProgressMessage(run_id=run_id, run_name=run_name, nodes=nodes)
+    await redis_client.publish(RUN_PROGRESS_CHANNEL, message.model_dump_json())
+
 
 async def _launch_run(
     run: Run,
@@ -254,6 +297,9 @@ async def _launch_run(
             (cls_, settings_cls(**{s.name: s.value for s in module.settings}))
         )
 
+    testbench_settings = run_service.testbench_settings
+    testbench_settings.progress_monitor = lambda caller: InterceptableTqdm
+
     testbench = PLCTestbench(
         original_audio_tracks,
         packet_loss_simulators,
@@ -262,22 +308,114 @@ async def _launch_run(
         run_service.testbench_settings,
     )
 
+    # Full per-run progress table, seeded with every node so that nodes which
+    # haven't started (or that start+finish between two polls) are still
+    # represented in every outgoing RunProgressMessage.
+    progress_state: dict[str, NodeProgress] = _seed_progress_state(testbench)
+
+    # Recupera i nodi dell'albero di esecuzione e assegna gli id ai moduli
+    # Un root_node per ogni traccia: accumuliamo gli id su tutte le tracce
+    pls_modules = run.modules[ModuleType.PacketLossSimulator]
+    plc_modules = run.modules[ModuleType.PLCAlgorithm]
+    oa_modules = run.modules[ModuleType.OutputAnalyser]
+
+    n_pls = len(pls_modules)
+    n_plc = len(plc_modules)
+
+    for module in pls_modules:
+        module.node_ids = []
+    for module in plc_modules:
+        module.node_ids = []
+    for module in oa_modules:
+        module.node_ids = []
+
+    for root_node in testbench.data_manager.root_nodes:
+        testbench_nodes = testbench.get_nodes_by_depth(root_node)
+        pls_nodes = testbench_nodes[1]
+        plc_nodes = testbench_nodes[2]
+        oa_nodes = testbench_nodes[3]
+
+        for module, node in zip(pls_modules, pls_nodes):
+            module.node_ids.append(node.get_id())
+
+        plc_step = n_pls
+        for i, module in enumerate(plc_modules):
+            start = i * plc_step
+            module.node_ids += [n.get_id() for n in plc_nodes[start : start + plc_step]]
+
+        oa_step = n_pls * n_plc
+        for i, module in enumerate(oa_modules):
+            start = i * oa_step
+            module.node_ids += [n.get_id() for n in oa_nodes[start : start + oa_step]]
+
     run.status = RunStatus.RUNNING
     run.testbench_internal_id = testbench.run_id
     await run_repository.update_run(run.id, run)
+    # Esegue il testbench in un thread separato per non bloccare l'event loop di FastAPI
+    run_exception: Exception | None = None
 
-    try:
-        testbench.run()
-    except Exception as e:
-        traceback.print_exception(e)
+    def _run_thread():
+        nonlocal run_exception
+        try:
+            testbench.run()
+        except Exception as e:
+            run_exception = e
+        finally:
+            InterceptableTqdm.reset_all()
+
+    thread = threading.Thread(target=_run_thread, daemon=True)
+    thread.start()
+
+    # Polling: ad ogni tick, fondiamo lo stato delle barre attive e quello
+    # delle barre appena chiuse dentro progress_state, poi pubblichiamo
+    # SEMPRE la tabella intera (non solo cio' che e' vivo in questo istante).
+    while thread.is_alive():
+        active = InterceptableTqdm.get_all()
+        closed = InterceptableTqdm.get_all_closed()
+
+        for desc, current, total in (pbar.get_progress() for pbar in active.values()):
+            if "|" not in desc:
+                continue
+            description, _, node_id = desc.partition("|")
+            if not node_id:
+                continue
+            progress_state[node_id] = NodeProgress(
+                description=description,
+                node_id=node_id,
+                current=current,
+                total=total,
+            )
+
+        for node_id, (desc, current, total) in closed.items():
+            description = desc.split("|", 1)[0] if "|" in desc else desc
+            progress_state[node_id] = NodeProgress(
+                description=description,
+                node_id=node_id,
+                current=current,
+                total=total,
+            )
+
+        await _publish_run_progress(
+            run.id, run.name, list(progress_state.values()), redis_client
+        )
+        await asyncio.sleep(_PROGRESS_POLL_INTERVAL)
+
+    thread.join()
+
+    if run_exception is not None:
+        traceback.print_exception(run_exception)
         run.status = RunStatus.FAILED
         await run_repository.update_run(run.id, run)
-        await _publish_run_completion(run.name, success=False)
+        await _publish_run_completion(
+            run.id, run.name, success=False, redis_client=redis_client
+        )
         return
 
     run.status = RunStatus.COMPLETED
     await run_repository.update_run(run.id, run)
-    await _publish_run_completion(run.name, success=True)
+    await _publish_run_completion(
+        run.id, run.name, success=True, redis_client=redis_client
+    )
 
    
 
