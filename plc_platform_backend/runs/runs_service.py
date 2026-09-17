@@ -51,15 +51,11 @@ from plc_platform_backend.runs.runs_ws import (
     RUN_PROGRESS_CHANNEL,
 )
 
-from plc_platform_backend.modules.modules_service import (
-    ModuleService,
-    get_modules_service,
-)
+from plc_platform_backend.modules.modules_service import ModuleService
 from plc_platform_backend.runs.runs_models import (
     RunConfigDto,
     RunConfigValidationError,
 )
-from fastapi import HTTPException
 
 _PROGRESS_POLL_INTERVAL = 0.1
 
@@ -544,7 +540,7 @@ class RunsService:
             return "/".join(
                 [original_track, sample_mask, reconstructed_track, output_analysis]
             )
-    
+
     async def export_run_config(self, run_id: str) -> str:
         run = await self.find_by_id(run_id)
         config = {
@@ -565,10 +561,10 @@ class RunsService:
             },
         }
         return json.dumps(config, indent=2)
-    
-    ## Validation of run configuration
-    async def validate_run_config(self, config: RunConfigDto) -> RunConfigDto:
-        modules_service: ModuleService = get_modules_service()
+
+    async def validate_run_config(
+        self, config: RunConfigDto, modules_service: ModuleService
+    ) -> list[RunConfigValidationError]:
         errors: list[RunConfigValidationError] = []
 
         for module_type, modules in config.modules.items():
@@ -578,11 +574,13 @@ class RunsService:
             for module in modules:
                 # Check if the module name is available
                 if module.name not in available_names:
-                    errors.append(RunConfigValidationError(
-                        module_type=module_type,
-                        module_name=module.name,
-                        error="Modulo non trovato"
-                    ))
+                    errors.append(
+                        RunConfigValidationError(
+                            module_type=module_type,
+                            module_name=module.name,
+                            error="Modulo non trovato",
+                        )
+                    )
                     continue
                 # Check if the module parameters are valid
                 available_module = next(m for m in available if m.name == module.name)
@@ -591,13 +589,15 @@ class RunsService:
 
                 # Check if the actual parameters match the expected parameters
                 if actual_params != expected_params:
-                    errors.append(RunConfigValidationError(
-                        module_type=module_type,
-                        module_name=module.name,
-                        error=f"Parametri non validi. Attesi: {expected_params}, ricevuti: {actual_params}"
-                    ))
-        # If there are any errors, raise an HTTPException with the details
-        if errors:
-            raise HTTPException(status_code=422, detail=[e.model_dump() for e in errors])
+                    errors.append(
+                        RunConfigValidationError(
+                            module_type=module_type,
+                            module_name=module.name,
+                            error=(
+                                f"Parametri non validi. Attesi: {expected_params}, "
+                                f"ricevuti: {actual_params}"
+                            ),
+                        )
+                    )
 
-        return config    
+        return errors

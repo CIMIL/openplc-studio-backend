@@ -3,14 +3,22 @@ import os
 import tempfile
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.background import BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
 
 from plc_platform_backend.assets.assets_models import TestbenchNodeDepth
-from plc_platform_backend.runs.runs_models import Run, RunCreateDto
+from plc_platform_backend.modules.modules_service import (
+    ModuleService,
+    get_modules_service,
+)
+from plc_platform_backend.runs.runs_models import (
+    Run,
+    RunCreateDto,
+    RunConfigDto,
+    RunConfigValidationError,
+)
 from plc_platform_backend.runs.runs_service import RunsService, get_runs_service
-from plc_platform_backend.runs.runs_models import Run, RunCreateDto, RunConfigDto, RunConfigValidationError
 
 router = APIRouter(
     prefix="/runs",
@@ -37,6 +45,7 @@ async def get_run(
     runs_service: Annotated[RunsService, Depends(get_runs_service)],
 ) -> Run:
     return await runs_service.find_by_id(run_id)
+
 
 @router.get("/{run_id}/config/export")
 async def export_run_config(
@@ -84,11 +93,18 @@ async def get_all_runs(
     return await runs_service.get_all()
 
 
-
-#controller for validating run config
 @router.post("/config/validate")
 async def validate_run_config(
     config: RunConfigDto,
     runs_service: Annotated[RunsService, Depends(get_runs_service)],
+    modules_service: Annotated[ModuleService, Depends(get_modules_service)],
 ) -> RunConfigDto:
-    return await runs_service.validate_run_config(config)
+    errors: list[RunConfigValidationError] = await runs_service.validate_run_config(
+        config, modules_service
+    )
+    if errors:
+        raise HTTPException(
+            status_code=422,
+            detail=[error.model_dump() for error in errors],
+        )
+    return config
