@@ -4,21 +4,28 @@ version = "0.1.0"
 description = ""
 authors = [{ name = "filippodaniotti", email = "febbrosto@gmail.com" }]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.12"
+
+dependencies = [
+    "fastapi[standard]>=0.115.6,<0.116.0",
+    "uvicorn>=0.34.0,<0.35.0",
+    "plctestbench",
+    "pydantic-settings>=2.7.1,<3.0.0",
+    "motor>=3.7.0,<4.0.0",
+    "dramatiq[redis]>=1.18.0,<2.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "debugpy>=1.8.11,<2.0.0",
+]
+
+[tool.uv.sources]
+plctestbench = { path = "../plc-testbench", editable = true }
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.poetry.dependencies]
-python = "3.11,<3.12"
-fastapi = { version = ">=0.115.6,<0.116.0", extras = ["standard"] }
-uvicorn = { version = ">=0.34.0,<0.35.0" }
-plctestbench = { path = "../plc-testbench", develop = true }
-pydantic-settings = "^2.7.1"
-motor = "^3.7.0"
-dramatiq = { extras = ["redis"], version = "^1.18.0" }
-
-
-[tool.poetry.group.dev.dependencies]
-debugpy = "^1.8.11"
+[tool.hatch.build.targets.wheel]
+packages = ["plc_platform_backend"]
