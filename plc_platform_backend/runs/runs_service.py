@@ -39,6 +39,7 @@ from plc_platform_backend.runs.runs_models import (
     Run,
     RunCompletionMessage,
     RunCreateDto,
+    RunPage,
     RunProgressMessage,
     RunStatus,
 )
@@ -448,17 +449,28 @@ class RunsService:
         return Run.from_document(saved_run)
 
     async def find_by_id(self, run_id: str) -> Run:
-        return Run.from_document(await self.runs_repository.get_run(run_id))
+        document = await self.runs_repository.get_run(run_id)
+        if document is None:
+            raise ValueError(f"Run {run_id} not found")
+        return Run.from_document(document)
 
-    async def get_all(self) -> list[Run]:
-        return [Run.from_document(run) for run in await self.runs_repository.get_all()]
+    async def get_page(self, page: int, page_size: int) -> RunPage:
+        total = await self.runs_repository.count_all()
+        skip = (page - 1) * page_size
+        documents = await self.runs_repository.get_page(skip, page_size)
+        return RunPage(
+            items=[Run.from_document(document) for document in documents],
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
 
-    async def launch_run_synch(self, run: Run) -> Run:
+    async def launch_run_synch(self, run: Run) -> None:
         await _launch_run(run, self.runs_repository, self, self.redis_client)
 
     async def get_assets_tar_by_depth(
         self, run_id: str, depth: TestbenchNodeDepth
-    ) -> list[str]:
+    ) -> io.BytesIO:
         run: Run = await self.find_by_id(run_id)
 
         paths = self.assets_repository.get_assets_paths(

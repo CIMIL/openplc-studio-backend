@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Literal
+from typing import Optional, Literal, cast
 
 from pydantic import BaseModel
 
@@ -20,7 +20,7 @@ class RunStatus(str, Enum):
 class RunDocument(BaseDocument):
     author: str
     name: str
-    testbench_internal_id: str
+    testbench_internal_id: Optional[str] = None
     status: RunStatus = RunStatus.CREATED
     tracks: list[str]
     modules: dict[ModuleType, list[Module]]
@@ -49,9 +49,9 @@ class Run(BaseModel):
     @staticmethod
     def from_document(document: RunDocument) -> Run:
         return Run(
-            id=document.id,
-            created=document.created,
-            updated=document.updated,
+            id=cast(str, document.id),
+            created=cast(datetime, document.created),
+            updated=cast(datetime, document.updated),
             author=document.author,
             name=document.name,
             testbench_internal_id=document.testbench_internal_id,
@@ -59,6 +59,13 @@ class Run(BaseModel):
             tracks=document.tracks,
             modules=document.modules,
         )
+
+
+class RunPage(BaseModel):
+    items: list[Run]
+    total: int
+    page: int
+    page_size: int
 
 
 class NodeProgress(BaseModel):

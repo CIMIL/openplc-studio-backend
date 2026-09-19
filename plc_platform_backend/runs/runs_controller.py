@@ -1,9 +1,9 @@
 import io
 import os
 import tempfile
-from typing import Annotated, Any
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.background import BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
 
@@ -17,6 +17,7 @@ from plc_platform_backend.runs.runs_models import (
     RunCreateDto,
     RunConfigDto,
     RunConfigValidationError,
+    RunPage,
 )
 from plc_platform_backend.runs.runs_service import RunsService, get_runs_service
 
@@ -89,8 +90,10 @@ async def get_run_assets_paths(
 @router.get("")
 async def get_all_runs(
     runs_service: Annotated[RunsService, Depends(get_runs_service)],
-) -> list[Run]:
-    return await runs_service.get_all()
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 10,
+) -> RunPage:
+    return await runs_service.get_page(page, page_size)
 
 
 @router.post("/config/validate")

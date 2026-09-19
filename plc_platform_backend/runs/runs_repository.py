@@ -31,19 +31,28 @@ class RunsRepository(BaseMongoDBRepository):
         )
 
         run_document = await self.collection.insert_one(
-            run_document.model_dump(by_alias=True, exclude=["id"])
+            run_document.model_dump(by_alias=True, exclude={"id"})
         )
 
-        run_document = await self.get_run(run_document.inserted_id)
+        created_run = await self.get_run(str(run_document.inserted_id))
+        assert created_run is not None  # just inserted
+        return created_run
 
-        return run_document
-
-    async def get_run(self, run_id: str) -> RunDocument:
+    async def get_run(self, run_id: str) -> RunDocument | None:
         run_data = await self.collection.find_one({"_id": ObjectId(run_id)})
         return RunDocument(**run_data) if run_data else None
 
-    async def get_all(self) -> list[RunDocument]:
-        runs_data = await self.collection.find().to_list(1000)
+    async def count_all(self) -> int:
+        return await self.collection.count_documents({})
+
+    async def get_page(self, skip: int, limit: int) -> list[RunDocument]:
+        runs_data = (
+            await self.collection.find()
+            .sort([("created", -1), ("_id", -1)])
+            .skip(skip)
+            .limit(limit)
+            .to_list(length=limit)
+        )
         return [RunDocument(**run_data) for run_data in runs_data]
 
     async def update_run(self, run_id: str, updated_run: Run) -> bool:
@@ -52,6 +61,6 @@ class RunsRepository(BaseMongoDBRepository):
         )
         return result.modified_count > 0
 
-    def delete_run(self, run_id: str) -> bool:
-        result = self.collection.delete_one({"_id": ObjectId(run_id)})
+    async def delete_run(self, run_id: str) -> bool:
+        result = await self.collection.delete_one({"_id": ObjectId(run_id)})
         return result.deleted_count > 0
