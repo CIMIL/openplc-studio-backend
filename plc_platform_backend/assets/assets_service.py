@@ -8,6 +8,7 @@ from tarfile import TarFile, TarInfo
 
 import numpy as np
 
+from plc_platform_backend.assets.assets_models import OriginalTrackMetadata
 from plc_platform_backend.assets.assets_repository import (
     AssetsRepository,
     get_assets_repository,
@@ -30,6 +31,9 @@ class AssetsService:
 
     async def get_all_original_track_filenames(self) -> list[str]:
         return await self.assets_repository.get_all_original_track_filenames()
+
+    async def get_all_original_track_metadata(self) -> list[OriginalTrackMetadata]:
+        return await self.assets_repository.get_all_original_track_metadata()
 
     def add_json_to_tar(
         self, data: np.ndarray, tar: TarFile, original_path: str, original_ext: str
