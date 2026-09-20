@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -17,6 +17,36 @@ class ModuleType(str, Enum):
     CrossfadeSettings = "CrossfadeSettings"
 
 
+class ParameterValidation(BaseModel):
+    min: float | None = None
+    max: float | None = None
+    step: float | None = None
+    exclusive_min: bool = False
+    exclusive_max: bool = False
+    min_length: int | None = None
+    max_length: int | None = None
+    pattern: str | None = None
+    min_items: int | None = None
+    max_items: int | None = None
+    unique: bool = False
+    sorted: Literal["ascending", "descending"] | None = None
+    item: ParameterValidation | None = None
+
+
+class ModuleConstraint(BaseModel):
+    type: Literal[
+        "less_than",
+        "length_relation",
+        "keys_match",
+        "per_key_length_relation",
+    ]
+    setting: str
+    related_setting: str | None = None
+    offset: int | None = None
+    allowed_key_sets: list[list[str]] | None = None
+    message: str | None = None
+
+
 class ModuleParameterDocument(BaseDocument):
     name: str
     type: str
@@ -30,6 +60,7 @@ class ModuleParameterSpec(BaseModel):
     type: str
     default: Any
     values: Optional[list[Any]] = None
+    validation: Optional[ParameterValidation] = None
 
 
 class ModuleParameter(BaseModel):
@@ -53,6 +84,7 @@ class ModuleDocument(BaseDocument):
 class ModuleSpec(BaseModel):
     name: str
     settings: list[ModuleParameterSpec]
+    constraints: list[ModuleConstraint] = Field(default_factory=lambda: [])
 
 
 class Module(BaseModel):

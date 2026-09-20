@@ -104,5 +104,6 @@ class RunConfigDto(BaseModel):
 class RunConfigValidationError(BaseModel):
     module_type: str
     module_name: str
+    setting: str | None = None
     error: str
 

@@ -36,7 +36,14 @@ router = APIRouter(
 async def create_run(
     run: RunCreateDto,
     runs_service: Annotated[RunsService, Depends(get_runs_service)],
+    modules_service: Annotated[ModuleService, Depends(get_modules_service)],
 ) -> Run:
+    errors = await runs_service.validate_run_create(run, modules_service)
+    if errors:
+        raise HTTPException(
+            status_code=422,
+            detail=[error.model_dump() for error in errors],
+        )
     return await runs_service.save_run(run)
 
 

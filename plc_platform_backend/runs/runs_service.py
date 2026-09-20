@@ -33,7 +33,12 @@ from plc_platform_backend.assets.assets_service import AssetsService, get_assets
 from plc_platform_backend.commons.configuration.configuration import get_configuration
 from plc_platform_backend.commons.interceptable_tqdm import InterceptableTqdm
 from plc_platform_backend.commons.redis_client import get_redis_client
-from plc_platform_backend.modules.modules_models import ModuleParameter, ModuleType
+from plc_platform_backend.modules.modules_models import (
+    Module,
+    ModuleParameter,
+    ModuleType,
+)
+from plc_platform_backend.modules.modules_validator import ModuleConfigValidator
 from plc_platform_backend.runs.runs_models import (
     NodeProgress,
     Run,
@@ -117,13 +122,22 @@ def _get_hydrated_module_settings(
                 ModuleParameter(name=s.name, value=_hydrate_crossfade_settings(s.value))
             )
         elif s.name == "crossfade_frequencies" and s.value:
-            crossfade_frequencies = [int(f) for f in s.value]
+            try:
+                crossfade_frequencies = [int(f) for f in s.value]
+            except (TypeError, ValueError) as error:
+                raise ValueError(
+                    f"Invalid crossfade frequencies: {s.value}"
+                ) from error
             hydrated_module_settings.append(
                 ModuleParameter(name=s.name, value=crossfade_frequencies)
             )
         elif s.name == "crossover_order" and s.value:
+            try:
+                crossover_order = int(s.value)
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"Invalid crossover order: {s.value}") from error
             hydrated_module_settings.append(
-                ModuleParameter(name=s.name, value=int(s.value))
+                ModuleParameter(name=s.name, value=crossover_order)
             )
         elif s.name == "band_settings":
             for band in {"linked", "mid", "side", "left", "right"}:
@@ -492,14 +506,21 @@ class RunsService:
                     data: np.ndarray = np.load(p, allow_pickle=True)
                     tar = self.assets_service.add_json_to_tar(data, tar, p, ".npy")
                 elif depth == TestbenchNodeDepth.OUTPUT_ANALYSIS:
-                    with open(p, "rb") as pkl:
-                        data: OutputAnalysis = pickle.load(pkl)
-                        if isinstance(data, SimpleCalculatorData):
-                            data = data.get_error()
-                            data = np.nan_to_num(data, nan=0)
-                            data = data.T
-                        elif isinstance(data, PEAQData):
-                            data = np.array([data.get_di(), data.get_odg()])
+                    try:
+                        with open(p, "rb") as pkl:
+                            # pi-lens-ignore: python-insecure-deserialization
+                            # Output analyses are pickles written by our own testbench worker.
+                            data: OutputAnalysis = pickle.load(pkl)
+                            if isinstance(data, SimpleCalculatorData):
+                                data = data.get_error()
+                                data = np.nan_to_num(data, nan=0)
+                                data = data.T
+                            elif isinstance(data, PEAQData):
+                                data = np.array([data.get_di(), data.get_odg()])
+                    except OSError as error:
+                        raise OSError(
+                            f"Could not read output analysis '{p}': {error}"
+                        ) from error
 
                     json_data = json.dumps(data.tolist())
                     json_buffer = io.BytesIO(json_data.encode("utf-8"))
@@ -577,18 +598,31 @@ class RunsService:
     async def validate_run_config(
         self, config: RunConfigDto, modules_service: ModuleService
     ) -> list[RunConfigValidationError]:
-        errors: list[RunConfigValidationError] = []
+        return self._validate_config_modules(config.modules, modules_service)
 
-        for module_type, modules in config.modules.items():
+    async def validate_run_create(
+        self, run: RunCreateDto, modules_service: ModuleService
+    ) -> list[RunConfigValidationError]:
+        return self._validate_config_modules(run.modules, modules_service)
+
+    def _validate_config_modules(
+        self,
+        modules: dict[ModuleType, list[Module]],
+        modules_service: ModuleService,
+    ) -> list[RunConfigValidationError]:
+        errors: list[RunConfigValidationError] = []
+        validator = ModuleConfigValidator(modules_service)
+
+        for module_type, module_list in (modules or {}).items():
             available = modules_service.get_all_modules_by_type(module_type)
             available_names = [m.name for m in available]
 
-            for module in modules:
+            for module in module_list or []:
                 # Check if the module name is available
                 if module.name not in available_names:
                     errors.append(
                         RunConfigValidationError(
-                            module_type=module_type,
+                            module_type=module_type.value,
                             module_name=module.name,
                             error="Modulo non trovato",
                         )
@@ -603,12 +637,24 @@ class RunsService:
                 if actual_params != expected_params:
                     errors.append(
                         RunConfigValidationError(
-                            module_type=module_type,
+                            module_type=module_type.value,
                             module_name=module.name,
                             error=(
                                 f"Parametri non validi. Attesi: {expected_params}, "
                                 f"ricevuti: {actual_params}"
                             ),
+                        )
+                    )
+                    continue
+
+                # Check that the provided values respect the manifest validation
+                for message in validator.validate_module(module_type, module):
+                    errors.append(
+                        RunConfigValidationError(
+                            module_type=module_type.value,
+                            module_name=module.name,
+                            setting=message.setting,
+                            error=message.message,
                         )
                     )
 

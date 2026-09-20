@@ -1,0 +1,732 @@
+PacketLossSimulator:
+  - name: BinomialPLS
+    settings:
+      - name: seed
+        type: int
+        default: 1
+        values: null
+      - name: packet_size
+        type: int
+        default: 32
+        values: null
+        validation:
+          min: 1
+      - name: per
+        type: float
+        default: 0.0001
+        values: null
+        validation:
+          min: 0
+          max: 1
+
+  - name: MetronomePLS
+    settings:
+      - name: seed
+        type: int
+        default: 1
+        values: null
+      - name: packet_size
+        type: int
+        default: 32
+        values: null
+        validation:
+          min: 1
+      - name: period
+        type: int
+        default: 100
+        values: null
+      - name: duration
+        type: int
+        default: 5
+        values: null
+      - name: offset
+        type: int
+        default: 0
+        values: null
+
+  - name: GilbertElliotPLS
+    settings:
+      - name: seed
+        type: int
+        default: 1
+        values: null
+      - name: packet_size
+        type: int
+        default: 32
+        values: null
+        validation:
+          min: 1
+      - name: p
+        type: float
+        default: 0.001
+        values: null
+        validation:
+          min: 0
+          max: 1
+      - name: r
+        type: float
+        default: 0.05
+        values: null
+        validation:
+          min: 0
+          max: 1
+      - name: h
+        type: float
+        default: 0.5
+        values: null
+        validation:
+          min: 0
+          max: 1
+      - name: k
+        type: float
+        default: 0.999999
+        values: null
+        validation:
+          min: 0
+          max: 1
+
+  - name: CustomMaskPLS
+    settings:
+      - name: packet_size
+        type: int
+        default: 32
+        values: null
+        validation:
+          min: 1
+      - name: mask
+        type: str
+        default: "0101"
+        values: null
+        validation:
+          min_length: 1
+          pattern: "^[01]+$"
+      - name: invert
+        type: bool
+        default: False
+        values: null
+
+PLCAlgorithm:
+  - name: AdvancedPLC
+    settings:
+      - name: band_settings
+        type: dict_str_list_PLCSettings
+        default:
+          left:
+            - name: ZerosPLC
+              settings: []
+          right:
+            - name: ZerosPLC
+              settings: []
+        values: null
+      - name: frequencies
+        type: dict_str_list_int
+        default:
+          left: []
+          right: []
+        values: null
+        validation:
+          item:
+            min: 0
+            max: 20000
+          sorted: ascending
+      - name: order
+        type: int
+        default: 4
+        values: null
+        validation:
+          min: 1
+      - name: stereo_image_processing
+        type: Enum
+        default: dual_mono
+        values:
+          - dual_mono
+          - mid_side
+      - name: channel_link
+        type: bool
+        default: false
+        values: null
+    constraints:
+      - type: keys_match
+        setting: band_settings
+        related_setting: frequencies
+        allowed_key_sets:
+          - [linked]
+          - [left, right]
+          - [mid, side]
+        message: >-
+          The channel keys must be either linked, left/right or mid/side.
+      - type: per_key_length_relation
+        setting: frequencies
+        related_setting: band_settings
+        offset: -1
+        message: >-
+          Each channel must have one more algorithm than its crossfade
+          frequencies.
+
+  - name: ZerosPLC
+    settings:
+      - name: crossfade
+        type: list_CrossfadeSettings
+        default:
+          - name: NoCrossfadeSettings
+            settings: []
+        values: null
+      - name: fade_in
+        type: list_CrossfadeSettings
+        default:
+          - name: NoCrossfadeSettings
+            settings: []
+        values: null
+      - name: crossfade_frequencies
+        type: list_int
+        default: []
+        values: null
+        validation:
+          item:
+            min: 0
+            max: 20000
+          sorted: ascending
+      - name: crossover_order
+        type: int
+        default: 4
+        values: null
+        validation:
+          min: 1
+    constraints:
+      - type: length_relation
+        setting: crossfade
+        related_setting: crossfade_frequencies
+        offset: 1
+        message: >-
+          The number of crossfade settings must be one more than the number of
+          crossfade frequencies.
+
+  - name: LastPacketPLC
+    settings:
+      - name: crossfade
+        type: list_CrossfadeSettings
+        default:
+          - name: NoCrossfadeSettings
+            settings: []
+        values: null
+      - name: fade_in
+        type: list_CrossfadeSettings
+        default:
+          - name: NoCrossfadeSettings
+            settings: []
+        values: null
+      - name: crossfade_frequencies
+        type: list_int
+        default: []
+        values: null
+        validation:
+          item:
+            min: 0
+            max: 20000
+          sorted: ascending
+      - name: crossover_order
+        type: int
+        default: 4
+        values: null
+        validation:
+          min: 1
+      - name: mirror_x
+        type: bool
+        default: false
+        values: null
+      - name: mirror_y
+        type: bool
+        default: false
+        values: null
+      - name: clip_strategy
+        type: Enum
+        default: subtract
+        values:
+          - subtract
+          - clip
+    constraints:
+      - type: length_relation
+        setting: crossfade
+        related_setting: crossfade_frequencies
+        offset: 1
+        message: >-
+          The number of crossfade settings must be one more than the number of
+          crossfade frequencies.
+
+  - name: LowCostPLC
+    settings:
+      - name: crossfade
+        type: list_CrossfadeSettings
+        default:
+          - name: NoCrossfadeSettings
+            settings: []
+        values: null
+      - name: fade_in
+        type: list_CrossfadeSettings
+        default:
+          - name: NoCrossfadeSettings
+            settings: []
+        values: null
+      - name: crossfade_frequencies
+        type: list_int
+        default: []
+        values: null
+        validation:
+          item:
+            min: 0
+            max: 20000
+          sorted: ascending
+      - name: crossover_order
+        type: int
+        default: 4
+        values: null
+        validation:
+          min: 1
+      - name: max_frequency
+        type: float
+        default: 4800
+        values: null
+        validation:
+          min: 0
+      - name: f_min
+        type: int
+        default: 80
+        values: null
+        validation:
+          min: 0
+      - name: beta
+        type: float
+        default: 1
+        values: null
+        validation:
+          min: 0
+      - name: n_m
+        type: int
+        default: 2
+        values: null
+        validation:
+          min: 0
+      - name: fade_in_length
+        type: int
+        default: 10
+        values: null
+        validation:
+          min: 0
+      - name: fade_out_length
+        type: float
+        default: 0.5
+        values: null
+        validation:
+          min: 0
+      - name: extraction_length
+        type: int
+        default: 2
+        values: null
+        validation:
+          min: 0
+    constraints:
+      - type: length_relation
+        setting: crossfade
+        related_setting: crossfade_frequencies
+        offset: 1
+        message: >-
+          The number of crossfade settings must be one more than the number of
+          crossfade frequencies.
+      - type: less_than
+        setting: f_min
+        related_setting: max_frequency
+        message: >-
+          The minimum frequency must be less than the maximum frequency.
+
+  - name: BurgPLC
+    settings:
+      - name: crossfade
+        type: list_CrossfadeSettings
+        default:
+          - name: NoCrossfadeSettings
+            settings: []
+        values: null
+      - name: fade_in
+        type: list_CrossfadeSettings
+        default:
+          - name: NoCrossfadeSettings
+            settings: []
+        values: null
+      - name: crossfade_frequencies
+        type: list_int
+        default: []
+        values: null
+        validation:
+          item:
+            min: 0
+            max: 20000
+          sorted: ascending
+      - name: crossover_order
+        type: int
+        default: 4
+        values: null
+        validation:
+          min: 1
+      - name: context_length
+        type: int
+        default: 100
+        values: null
+        validation:
+          min: 1
+      - name: order
+        type: int
+        default: 1
+        values: null
+        validation:
+          min: 1
+    constraints:
+      - type: length_relation
+        setting: crossfade
+        related_setting: crossfade_frequencies
+        offset: 1
+        message: >-
+          The number of crossfade settings must be one more than the number of
+          crossfade frequencies.
+
+  - name: VermaPLC
+    settings:
+      - name: crossfade
+        type: list_CrossfadeSettings
+        default:
+          - name: NoCrossfadeSettings
+            settings: []
+        values: null
+      - name: fade_in
+        type: list_CrossfadeSettings
+        default:
+          - name: NoCrossfadeSettings
+            settings: []
+        values: null
+      - name: crossfade_frequencies
+        type: list_int
+        default: []
+        values: null
+        validation:
+          item:
+            min: 0
+            max: 20000
+          sorted: ascending
+      - name: crossover_order
+        type: int
+        default: 4
+        values: null
+        validation:
+          min: 1
+      - name: model_path
+        type: str
+        default: dl_models/model_bs256_100epochs_0.01_1e-3_1e-7.onnx
+        values: null
+        validation:
+          pattern: ".*\\.onnx$"
+      - name: fs_dl
+        type: int
+        default: 16000
+        values: null
+        validation:
+          min: 1
+      - name: context_length
+        type: int
+        default: 8000
+        values: null
+        validation:
+          min: 1
+      - name: hop_size
+        type: int
+        default: 160
+        values: null
+        validation:
+          min: 1
+      - name: window_length
+        type: int
+        default: 480
+        values: null
+        validation:
+          min: 1
+      - name: lower_edge_hertz
+        type: float
+        default: 40
+        values: null
+        validation:
+          min: 0
+      - name: upper_edge_hertz
+        type: float
+        default: 7600
+        values: null
+      - name: num_mel_bins
+        type: int
+        default: 100
+        values: null
+        validation:
+          min: 1
+    constraints:
+      - type: length_relation
+        setting: crossfade
+        related_setting: crossfade_frequencies
+        offset: 1
+        message: >-
+          The number of crossfade settings must be one more than the number of
+          crossfade frequencies.
+      - type: less_than
+        setting: lower_edge_hertz
+        related_setting: upper_edge_hertz
+        message: "The lower edge must be less than the upper edge."
+
+  - name: PARCnetPLC
+    settings:
+      - name: crossfade
+        type: list_CrossfadeSettings
+        default:
+          - name: NoCrossfadeSettings
+            settings: []
+        values: null
+      - name: fade_in
+        type: list_CrossfadeSettings
+        default:
+          - name: NoCrossfadeSettings
+            settings: []
+        values: null
+      - name: crossfade_frequencies
+        type: list_int
+        default: []
+        values: null
+        validation:
+          item:
+            min: 0
+            max: 20000
+          sorted: ascending
+      - name: crossover_order
+        type: int
+        default: 4
+        values: null
+        validation:
+          min: 1
+      - name: config_preset
+        type: Enum
+        default: is2_mplc_challenge
+        values:
+          - is2_mplc_challenge
+          - custom
+      - name: dl_model_path
+        type: str
+        default: dl_models/parcnet-is2_mplc_challenge.onnx
+        values: null
+        validation:
+          pattern: ".*\\.onnx$"
+      - name: dl_fs
+        type: int
+        default: 44100
+        values: null
+      - name: extra_packet_dim
+        type: int
+        default: 256
+        values: null
+        validation:
+          min: 0
+      - name: ar_order
+        type: int
+        default: 256
+        values: null
+        validation:
+          min: 128
+      - name: ar_fade_dim
+        type: int
+        default: 8
+        values: null
+        validation:
+          min: 1
+      - name: ar_diagonal_load
+        type: float
+        default: 0.001
+        values: null
+      - name: context_length_blocks
+        type: int
+        default: 8
+        values: null
+      - name: nn_fade_dim
+        type: int
+        default: 64
+        values: null
+    constraints:
+      - type: length_relation
+        setting: crossfade
+        related_setting: crossfade_frequencies
+        offset: 1
+        message: >-
+          The number of crossfade settings must be one more than the number of
+          crossfade frequencies.
+
+OutputAnalyser:
+  - name: MSECalculator
+    settings:
+      - name: N
+        type: int
+        default: 1024
+        values: null
+      - name: hop
+        type: int
+        default: null
+        values: null
+      - name: amp_scale
+        type: float
+        default: 1
+        values: null
+
+  - name: MAECalculator
+    settings:
+      - name: N
+        type: int
+        default: 1024
+        values: null
+      - name: hop
+        type: int
+        default: null
+        values: null
+      - name: amp_scale
+        type: float
+        default: 1
+        values: null
+
+  - name: PEAQCalculator
+    settings:
+      - name: peaq_mode
+        type: Enum
+        default: basic
+        values:
+          - basic
+          - advanced
+
+  - name: WindowedPEAQCalculator
+    settings:
+      - name: peaq_mode
+        type: Enum
+        default: basic
+        values:
+          - basic
+          - advanced
+      - name: intorno_length
+        type: int
+        default: 3000
+        values: null
+
+  - name: PerceptualCalculator
+    settings:
+      - name: intorno_length
+        type: int
+        default: 3000
+        values: null
+      - name: min_frequency
+        type: float
+        default: 10
+        values: null
+      - name: max_frequency
+        type: float
+        default: 20000
+        values: null
+      - name: bins_per_octave
+        type: int
+        default: 48
+        values: null
+      - name: n_bins
+        type: int
+        default: 100
+        values: null
+      - name: minimum_window
+        type: int
+        default: 128
+        values: null
+
+CrossfadeSettings:
+  - name: NoCrossfadeSettings
+    settings:
+
+  - name: ManualCrossfadeSettings
+    settings:
+      - name: length
+        type: float
+        default: 2.0
+        values: null
+        validation:
+          min: 0
+      - name: function
+        type: Enum
+        default: power
+        values:
+          - power
+          - sinusoidal
+      - name: exponent
+        type: float
+        default: 1.0
+        values: null
+        validation:
+          min: 0
+      - name: type
+        type: Enum
+        default: power
+        values:
+          - power
+          - amplitude
+
+  - name: LinearCrossfadeSettings
+    settings:
+      - name: length
+        type: float
+        default: 2.0
+        values: null
+        validation:
+          min: 0
+      - name: type
+        type: Enum
+        default: power
+        values:
+          - power
+          - amplitude
+
+  - name: QuadraticCrossfadeSettings
+    settings:
+      - name: length
+        type: float
+        default: 2.0
+        values: null
+        validation:
+          min: 0
+      - name: type
+        type: Enum
+        default: power
+        values:
+          - power
+          - amplitude
+
+  - name: CubicCrossfadeSettings
+    settings:
+      - name: length
+        type: float
+        default: 2.0
+        values: null
+        validation:
+          min: 0
+      - name: type
+        type: Enum
+        default: power
+        values:
+          - power
+          - amplitude
+
+  - name: SinusoidalCrossfadeSettings
+    settings:
+      - name: length
+        type: float
+        default: 2.0
+        values: null
+        validation:
+          min: 0
+      - name: type
+        type: Enum
+        default: power
+        values:
+          - power
+          - amplitude

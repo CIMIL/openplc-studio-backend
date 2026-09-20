@@ -28,12 +28,22 @@ class ModuleService:
     def get_all_modules_by_type(self, module_type: ModuleType) -> list[ModuleSpec]:
         return self.modules_repository.get_all_modules_by_type(module_type)
 
+    def get_module_spec(
+        self, module_name: str, module_type: ModuleType
+    ) -> ModuleSpec | None:
+        return next(
+            (
+                module
+                for module in self.get_all_modules_by_type(module_type)
+                if module.name == module_name
+            ),
+            None,
+        )
+
     def get_module_params(
         self, module_name: str, module_type: ModuleType
     ) -> list[ModuleParameterSpec]:
-        module: ModuleSpec = self.get_all_modules_by_type(module_type).get(
-            module_name, None
-        )
+        module = self.get_module_spec(module_name, module_type)
 
         if module is None:
             return []
