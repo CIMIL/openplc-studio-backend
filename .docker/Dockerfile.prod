@@ -1,0 +1,109 @@
+# syntax=docker/dockerfile:1
+
+# Production image for the PLC Platform backend.
+# Build from this repository's root:
+#   docker build -f .docker/Dockerfile.prod -t plc-platform-backend .
+
+ARG PYTHON_VERSION=3.11-slim-bookworm
+
+# Build the gstpeaq plugin and CLI used by the PEAQ output analyser.
+FROM debian:12-slim AS peaq-builder
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        autoconf \
+        automake \
+        build-essential \
+        git \
+        git2cl \
+        gtk-doc-tools \
+        libgstreamer-plugins-bad1.0-dev \
+        libgstreamer-plugins-base1.0-dev \
+        libgstreamer1.0-dev \
+        libtool \
+        m4 \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 https://github.com/HSU-ANT/gstpeaq.git /src/gstpeaq \
+    && cd /src/gstpeaq \
+    && aclocal \
+    && autoheader \
+    && ./autogen.sh \
+    && sed -i 's/SUBDIRS = src doc/SUBDIRS = src/' Makefile.am \
+    && ./configure --libdir=/usr/lib \
+    && automake \
+    && make -j"$(nproc)" \
+    && make install
+
+# Resolve and build Python dependencies separately from the runtime image.
+FROM python:${PYTHON_VERSION} AS python-builder
+
+COPY --from=ghcr.io/astral-sh/uv:0.11.19 /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
+
+WORKDIR /app/backend
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        g++ \
+        gcc \
+        git \
+        make \
+    && rm -rf /var/lib/apt/lists/*
+
+# The committed manifest and lock resolve plctestbench directly from GitHub.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project --no-editable
+
+COPY README.md ./
+COPY plc_platform_backend ./plc_platform_backend
+RUN uv sync --locked --no-dev --no-editable
+
+# Keep compilers, git, uv, and dependency source trees out of the final image.
+FROM python:${PYTHON_VERSION} AS runtime
+
+ENV PATH=/app/backend/.venv/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    GST_PLUGIN_PATH=/usr/lib/gstreamer-1.0
+
+WORKDIR /app/backend
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        gstreamer1.0-alsa \
+        gstreamer1.0-libav \
+        gstreamer1.0-plugins-bad \
+        gstreamer1.0-plugins-base \
+        gstreamer1.0-plugins-good \
+        gstreamer1.0-plugins-ugly \
+        gstreamer1.0-tools \
+        libgomp1 \
+        libsndfile1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 1000 app \
+    && useradd --uid 1000 --gid app --create-home --shell /usr/sbin/nologin app \
+    && mkdir -p /app/backend/artifacts-storage /app/backend/user-plugins \
+    && chown -R app:app /app
+
+COPY --from=python-builder --chown=app:app /app/backend/.venv /app/backend/.venv
+COPY --from=peaq-builder /usr/lib/gstreamer-1.0/ /usr/lib/gstreamer-1.0/
+COPY --from=peaq-builder /usr/local/bin/peaq /usr/local/bin/peaq
+COPY --chown=app:app --chmod=755 .docker/docker-entrypoint.prod.sh \
+    /app/backend/.docker/docker-entrypoint.sh
+
+USER app
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD ["/app/backend/.docker/docker-entrypoint.sh", "healthcheck"]
+
+ENTRYPOINT ["/app/backend/.docker/docker-entrypoint.sh"]
+CMD ["api"]

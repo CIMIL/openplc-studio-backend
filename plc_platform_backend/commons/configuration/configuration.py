@@ -5,20 +5,26 @@ from pydantic_settings import BaseSettings
 
 @lru_cache
 def get_configuration():
-    return Configuration()
+    # Values are populated from the environment by pydantic-settings.
+    return Configuration()  # pyright: ignore[reportCallIssue]
 
 
 class Configuration(BaseSettings):
     mongo_initdb_root_username: str
     mongo_initdb_root_password: str
+    mongo_host: str = "mongo"
+    mongo_port: int = 27017
+    mongo_database: str = "plc-testbench"
     plc_root_folder: str
     plugins_directory: str
     redis_url: str
 
-    def validate(self):
+    def validate_configuration(self) -> None:
         for field_name in [
             "mongo_initdb_root_username",
             "mongo_initdb_root_password",
+            "mongo_host",
+            "mongo_database",
             "plc_root_folder",
             "plugins_directory",
             "redis_url",

@@ -15,8 +15,12 @@ async def storage_setup(app: FastAPI) -> AsyncIterator[None]:
     print("storage lifespan")
 
     config = get_configuration()
-    if not os.path.exists(config.plc_root_folder):
-        os.makedirs(config.plc_root_folder)
+    try:
+        os.makedirs(config.plc_root_folder, exist_ok=True)
+    except OSError as exc:
+        raise RuntimeError(
+            f"Unable to prepare artifact directory: {config.plc_root_folder}"
+        ) from exc
 
     yield
 
@@ -27,7 +31,7 @@ async def db_setup(app: FastAPI) -> AsyncIterator[None]:
     mongodb = get_mongodb()
     ping_response = await mongodb.database.command("ping")
 
-    if int(ping_response["ok"]) != 1:
+    if ping_response.get("ok") != 1:
         raise Exception("Problem connecting to database cluster.")
     else:
         print("Connected to database cluster.")
@@ -65,6 +69,12 @@ class Lifespans:
 
 
 app = FastAPI(lifespan=Lifespans([db_setup, storage_setup]))
+
+
+@app.get("/health", tags=["health"])
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
 
 app.add_middleware(
     CORSMiddleware,

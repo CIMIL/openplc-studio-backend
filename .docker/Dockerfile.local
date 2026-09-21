@@ -33,21 +33,24 @@ WORKDIR /app/backend
 RUN  apt-get update &&  apt-get install -y \
     build-essential gcc g++ make cmake git
 
-# Copy only the dependency manifests first so the dependency layer is cached
-# until the lock files change. `plctestbench` is an editable path dependency
-# (`../plc-testbench`), so its pyproject is required for the resolution.
+# uv's TOML source declarations do not interpolate environment variables. The
+# local image therefore replaces the production Git source with the sibling
+# development checkout before resolving dependencies.
 COPY plc-platform-backend/pyproject.toml plc-platform-backend/uv.lock ./
 COPY plc-testbench/pyproject.toml /app/plc-testbench/pyproject.toml
+RUN sed -i \
+    's|plctestbench = { git = "https://github.com/CIMIL/plc-testbench", branch = "public" }|plctestbench = { path = "../plc-testbench", editable = true }|' \
+    pyproject.toml \
+    && grep -F 'plctestbench = { path = "../plc-testbench", editable = true }' pyproject.toml \
+    && uv sync --no-install-project --no-install-package plctestbench
 
-# Install third-party dependencies only: skip the backend project and the
-# editable `plctestbench` path dependency (its sources are not copied yet).
-RUN uv sync --locked --no-install-project --no-install-package plctestbench
-
-# Copy the sources and finish the installation (backend + development group).
-COPY ./plc-platform-backend ./
+# Copy sources without overwriting the development-only pyproject.toml above,
+# then install both editable projects and the development dependency group.
+COPY plc-platform-backend/README.md ./README.md
+COPY plc-platform-backend/.docker ./.docker
+COPY plc-platform-backend/plc_platform_backend ./plc_platform_backend
 COPY ./plc-testbench /app/plc-testbench
-
-RUN uv sync --locked
+RUN uv sync
 
 RUN  apt-get update &&  apt-get install -y libgstreamer1.0-dev \
     libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \

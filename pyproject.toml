@@ -16,12 +16,10 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
-    "debugpy>=1.8.11,<2.0.0",
-]
+dev = ["debugpy>=1.8.11,<2.0.0"]
 
 [tool.uv.sources]
-plctestbench = { path = "../plc-testbench", editable = true }
+plctestbench = { git = "https://github.com/CIMIL/plc-testbench", branch = "public" }
 
 [build-system]
 requires = ["hatchling"]
