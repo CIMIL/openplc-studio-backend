@@ -14,6 +14,7 @@ RUN apt-get update \
         autoconf \
         automake \
         build-essential \
+        ca-certificates \
         git \
         git2cl \
         gtk-doc-tools \
