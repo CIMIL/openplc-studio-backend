@@ -62,3 +62,15 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Publish Docker Hub README
+        # yamllint disable-line rule:line-length
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa
+        with:
+          # This user must be a Docker Hub repository Admin in the CIMIL org.
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          # PAT requires Docker Hub read, write, and delete scopes.
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}
+          short-description: OpenPLC Studio backend
+          readme-filepath: ./README.md
