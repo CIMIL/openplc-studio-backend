@@ -15,7 +15,7 @@ concurrency:
 env:
   DOCKERHUB_NAMESPACE: >-
     ${{ vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_USERNAME }}
-  IMAGE_REPOSITORY: plc-platform-backend
+  IMAGE_REPOSITORY: openplc-studio-backend
 
 jobs:
   publish:
