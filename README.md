@@ -1,6 +1,6 @@
 # OpenPLC Studio Backend
 
-![OpenPLC Studio banner](https://raw.githubusercontent.com/CIMIL/openplc-studio/master/assets/banner.png)
+![OpenPLC Studio banner](https://raw.githubusercontent.com/CIMIL/openplc-studio/main/assets/banner.png)
 
 [![Build and publish](https://github.com/filippodaniotti/openplc-studio-backend/actions/workflows/publish-image.yml/badge.svg)](https://github.com/filippodaniotti/openplc-studio-backend/actions/workflows/publish-image.yml)
 [![Docker pulls](https://img.shields.io/docker/pulls/cimil/openplc-studio-backend?logo=docker&label=Docker%20pulls)](https://hub.docker.com/r/cimil/openplc-studio-backend)
