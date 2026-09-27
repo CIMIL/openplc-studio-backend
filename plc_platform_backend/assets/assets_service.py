@@ -1,15 +1,9 @@
 from __future__ import annotations
 
-import io
-import json
-import os
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from functools import lru_cache
-from tarfile import TarFile, TarInfo
 from typing import BinaryIO
-
-import numpy as np
 from fastapi import UploadFile
 
 from plc_platform_backend.assets.assets_models import (
@@ -186,15 +180,3 @@ class AssetsService:
             status=document.status,
             created=document.created or datetime.now(timezone.utc),
         )
-
-    def add_json_to_tar(
-        self, data: np.ndarray, tar: TarFile, original_path: str, original_ext: str
-    ) -> TarFile:
-        json_data = json.dumps(data.tolist())
-        json_buffer = io.BytesIO(json_data.encode("utf-8"))
-        tarinfo = TarInfo(
-            name=os.path.basename(original_path).replace(original_ext, ".json")
-        )
-        tarinfo.size = len(json_data.encode("utf-8"))
-        tar.addfile(tarinfo, json_buffer)
-        return tar

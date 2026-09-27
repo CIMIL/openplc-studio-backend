@@ -1,7 +1,14 @@
+import json
 import os
+import pickle
+import tarfile
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import numpy as np
 
 os.environ.setdefault("MONGO_INITDB_ROOT_USERNAME", "test")
 os.environ.setdefault("MONGO_INITDB_ROOT_PASSWORD", "test")
@@ -9,6 +16,10 @@ os.environ.setdefault("PLC_ROOT_FOLDER", "/tmp/plc-testbench-tests")
 os.environ.setdefault("PLUGINS_DIRECTORY", "/tmp/plc-testbench-tests/plugins")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 
+from plc_platform_backend.assets.assets_models import (
+    RunArtifactKind,
+    TestbenchNodeDepth,
+)
 from plc_platform_backend.modules.modules_models import (
     Module,
     ModuleParameter,
@@ -21,6 +32,8 @@ from plc_platform_backend.runs.runs_models import (
     RunStatus,
 )
 from plc_platform_backend.runs.runs_service import (
+    RunArtifactsNotFoundError,
+    RunArtifactsUnavailableError,
     RunNotDeletableError,
     RunNotExecutableError,
     RunQueueError,
@@ -29,6 +42,126 @@ from plc_platform_backend.runs.runs_service import (
     _launch_run,
     _transition_run_status,
 )
+from plctestbench.output_analyser import SimpleCalculatorData
+
+
+class RunArtifactsArchiveTests(IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.temp_directory = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_directory.name).resolve()
+        self.service = RunsService.__new__(RunsService)
+        self.service.find_by_id = AsyncMock(
+            return_value=Run.from_document(make_run_document(RunStatus.COMPLETED))
+        )
+        self.service.testbench_settings = SimpleNamespace()
+
+        original = self.root / "my-track"
+        sample_mask = (
+            self.root / "my-track-lost_samples_masks" / "LossSimulator--42"
+        )
+        reconstructed = (
+            self.root
+            / "my-track-lost_samples_masks"
+            / "LossSimulator--42-reconstructed_tracks"
+            / "PLC-7"
+        )
+        output_analysis = (
+            self.root
+            / "my-track-lost_samples_masks"
+            / "LossSimulator--42-reconstructed_tracks"
+            / "PLC-7-output_analyses"
+            / "SimpleCalculator-9"
+        )
+        self.stems = {
+            TestbenchNodeDepth.ORIGINAL_TRACKS: original,
+            TestbenchNodeDepth.SAMPLE_MASKS: sample_mask,
+            TestbenchNodeDepth.RECONSTRUCTED_TRACKS: reconstructed,
+            TestbenchNodeDepth.OUTPUT_ANALYSIS: output_analysis,
+        }
+        extensions = {
+            TestbenchNodeDepth.ORIGINAL_TRACKS: ".wav",
+            TestbenchNodeDepth.SAMPLE_MASKS: ".npy",
+            TestbenchNodeDepth.RECONSTRUCTED_TRACKS: ".wav",
+            TestbenchNodeDepth.OUTPUT_ANALYSIS: ".pickle",
+        }
+        repository = SimpleNamespace(
+            get_root_folder=lambda: self.root,
+            get_assets_paths=lambda run, depth, settings: [str(self.stems[depth])],
+            resolve_asset_path=lambda stem, depth: f"{stem}{extensions[depth]}",
+        )
+        self.service.assets_repository = repository
+
+        original.with_suffix(".wav").write_bytes(b"original wav")
+        sample_mask.parent.mkdir(parents=True)
+        np.save(sample_mask.with_suffix(".npy"), np.array([10, 20]))
+        reconstructed.parent.mkdir(parents=True)
+        reconstructed.with_suffix(".wav").write_bytes(b"reconstructed wav")
+        output_analysis.parent.mkdir(parents=True)
+        with output_analysis.with_suffix(".pickle").open("wb") as output_file:
+            pickle.dump(
+                SimpleCalculatorData(np.array([[np.nan, 2], [3, 4]])),
+                output_file,
+            )
+
+    def tearDown(self) -> None:
+        self.temp_directory.cleanup()
+
+    async def test_builds_named_archives_from_shared_artifact_enumeration(self) -> None:
+        expected = {
+            RunArtifactKind.ORIGINAL_TRACKS: ("my-track.wav", b"original wav"),
+            RunArtifactKind.SAMPLE_MASKS: (
+                "LossSimulator--42.json",
+                [10, 20],
+            ),
+            RunArtifactKind.RECONSTRUCTED_TRACKS: (
+                "my-track/LossSimulator--42/PLC-7.wav",
+                b"reconstructed wav",
+            ),
+            RunArtifactKind.OUTPUT_ANALYSIS: (
+                "my-track/LossSimulator--42/PLC-7/SimpleCalculator-9.json",
+                [[0.0, 3.0], [2.0, 4.0]],
+            ),
+        }
+
+        for kind, (expected_name, expected_content) in expected.items():
+            with self.subTest(kind=kind):
+                archive_buffer = await self.service.get_artifacts_archive(
+                    "507f1f77bcf86cd799439011", kind
+                )
+                with tarfile.open(fileobj=archive_buffer, mode="r:") as archive:
+                    self.assertEqual(archive.getnames(), [expected_name])
+                    member = archive.extractfile(expected_name)
+                    self.assertIsNotNone(member)
+                    content = member.read()
+
+                if isinstance(expected_content, bytes):
+                    self.assertEqual(content, expected_content)
+                else:
+                    self.assertEqual(json.loads(content), expected_content)
+
+    async def test_rejects_artifacts_for_incomplete_run(self) -> None:
+        self.service.find_by_id.return_value = Run.from_document(make_run_document())
+
+        with self.assertRaises(RunArtifactsUnavailableError):
+            await self.service.get_artifacts_archive(
+                "507f1f77bcf86cd799439011", RunArtifactKind.ORIGINAL_TRACKS
+            )
+
+    async def test_reports_missing_expected_artifacts(self) -> None:
+        self.stems[TestbenchNodeDepth.RECONSTRUCTED_TRACKS].with_suffix(
+            ".wav"
+        ).unlink()
+
+        with self.assertRaises(RunArtifactsNotFoundError) as context:
+            await self.service.get_artifacts_archive(
+                "507f1f77bcf86cd799439011",
+                RunArtifactKind.RECONSTRUCTED_TRACKS,
+            )
+
+        self.assertEqual(
+            context.exception.archive_paths,
+            ["my-track/LossSimulator--42/PLC-7.wav"],
+        )
 
 
 class RunsServiceDeleteRunTests(IsolatedAsyncioTestCase):

@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import IntEnum
+from enum import Enum, IntEnum
 
 from pydantic import BaseModel, Field
 
@@ -11,6 +11,13 @@ class TestbenchNodeDepth(IntEnum):
     SAMPLE_MASKS = 1
     RECONSTRUCTED_TRACKS = 2
     OUTPUT_ANALYSIS = 3
+
+
+class RunArtifactKind(str, Enum):
+    ORIGINAL_TRACKS = "original-tracks"
+    SAMPLE_MASKS = "sample-masks"
+    RECONSTRUCTED_TRACKS = "reconstructed-tracks"
+    OUTPUT_ANALYSIS = "output-analysis"
 
 
 class OriginalTrackMetadata(BaseModel):

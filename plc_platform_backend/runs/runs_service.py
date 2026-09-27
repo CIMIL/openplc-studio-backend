@@ -4,19 +4,20 @@ import asyncio
 import io
 import json
 import logging
-import os
 import pickle
 import tarfile
 import threading
 import traceback
+from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import plctestbench.loss_simulator
 import plctestbench.output_analyser
 import plctestbench.plc_algorithm
 import redis.asyncio as aioredis
-from plctestbench.file_wrapper import OutputAnalysis
 from plctestbench.models import DBPlatform, TestbenchConfiguration
 from plctestbench.output_analyser import PEAQData, SimpleCalculatorData
 from plctestbench.plc_testbench import PLCTestbench
@@ -25,12 +26,11 @@ from plctestbench.utils import get_class
 from plctestbench.worker import OriginalAudio
 
 from plc_platform_backend import actors
-from plc_platform_backend.assets.assets_models import TestbenchNodeDepth
+from plc_platform_backend.assets.assets_models import RunArtifactKind, TestbenchNodeDepth
 from plc_platform_backend.assets.assets_repository import (
     AssetsRepository,
     get_assets_repository,
 )
-from plc_platform_backend.assets.assets_service import AssetsService, get_assets_service
 from plc_platform_backend.commons.configuration.configuration import get_configuration
 from plc_platform_backend.commons.interceptable_tqdm import InterceptableTqdm
 from plc_platform_backend.commons.redis_client import get_redis_client
@@ -71,6 +71,20 @@ from plc_platform_backend.runs.runs_models import (
 _PROGRESS_POLL_INTERVAL = 0.1
 logger = logging.getLogger(__name__)
 
+_ARTIFACT_DEPTHS = {
+    RunArtifactKind.ORIGINAL_TRACKS: TestbenchNodeDepth.ORIGINAL_TRACKS,
+    RunArtifactKind.SAMPLE_MASKS: TestbenchNodeDepth.SAMPLE_MASKS,
+    RunArtifactKind.RECONSTRUCTED_TRACKS: TestbenchNodeDepth.RECONSTRUCTED_TRACKS,
+    RunArtifactKind.OUTPUT_ANALYSIS: TestbenchNodeDepth.OUTPUT_ANALYSIS,
+}
+
+
+@dataclass(frozen=True)
+class RunArtifact:
+    source_path: Path
+    archive_path: str
+    encoding: Literal["file", "numpy-json", "output-analysis-json"]
+
 
 class RunNotDeletableError(Exception):
     pass
@@ -85,6 +99,20 @@ class RunQueueError(Exception):
 
 
 class RunPreparationError(Exception):
+    pass
+
+
+class RunArtifactsUnavailableError(Exception):
+    pass
+
+
+class RunArtifactsNotFoundError(Exception):
+    def __init__(self, archive_paths: list[str]) -> None:
+        self.archive_paths = archive_paths
+        super().__init__("Run artifacts were not found: " + ", ".join(archive_paths))
+
+
+class RunArtifactConversionError(Exception):
     pass
 
 
@@ -528,7 +556,6 @@ class RunsService:
     def __init__(self) -> None:
         self.runs_repository: RunsRepository = get_runs_repository()
         self.assets_repository: AssetsRepository = get_assets_repository()
-        self.assets_service: AssetsService = get_assets_service()
         self.testbench_settings: TestbenchConfiguration = self.get_testbench_settings()
         self.redis_client: aioredis.Redis = get_redis_client()
 
@@ -628,61 +655,176 @@ class RunsService:
     async def launch_run_synch(self, run: Run) -> None:
         await _launch_run(run, self.runs_repository, self, self.redis_client)
 
-    async def get_assets_tar_by_depth(
-        self, run_id: str, depth: TestbenchNodeDepth
+    async def get_artifacts_archive(
+        self, run_id: str, kind: RunArtifactKind
     ) -> io.BytesIO:
-        run: Run = await self.find_by_id(run_id)
+        run = await self.find_by_id(run_id)
+        if run.status != RunStatus.COMPLETED:
+            raise RunArtifactsUnavailableError(
+                f"Run {run_id} artifacts are unavailable while its status is "
+                f"{run.status.value}"
+            )
 
-        paths = self.assets_repository.get_assets_paths(
-            run, depth, self.testbench_settings
-        )
-
-        paths = [self.assets_repository.resolve_asset_path(p, depth) for p in paths]
+        artifacts = self.enumerate_run_artifacts(run, kind)
+        missing = [
+            artifact.archive_path
+            for artifact in artifacts
+            if not artifact.source_path.is_file()
+        ]
+        if missing:
+            raise RunArtifactsNotFoundError(missing)
 
         tar_buffer = io.BytesIO()
-
         with tarfile.open(
             fileobj=tar_buffer, mode="w", format=tarfile.PAX_FORMAT
-        ) as tar:
-            for p in paths:
-                if not os.path.exists(p):
-                    continue
-
-                if depth == TestbenchNodeDepth.SAMPLE_MASKS:
-                    # pi-lens-ignore: python-insecure-deserialization
-                    # Sample masks are NumPy files written by our own testbench worker.
-                    data: np.ndarray = np.load(p, allow_pickle=True)
-                    tar = self.assets_service.add_json_to_tar(data, tar, p, ".npy")
-                elif depth == TestbenchNodeDepth.OUTPUT_ANALYSIS:
-                    try:
-                        with open(p, "rb") as pkl:
-                            # pi-lens-ignore: python-insecure-deserialization
-                            # Output analyses are pickles written by our own testbench worker.
-                            data: OutputAnalysis = pickle.load(pkl)
-                            if isinstance(data, SimpleCalculatorData):
-                                data = data.get_error()
-                                data = np.nan_to_num(data, nan=0)
-                                data = data.T
-                            elif isinstance(data, PEAQData):
-                                data = np.array([data.get_di(), data.get_odg()])
-                    except OSError as error:
-                        raise OSError(
-                            f"Could not read output analysis '{p}': {error}"
-                        ) from error
-
-                    json_data = json.dumps(data.tolist())
-                    json_buffer = io.BytesIO(json_data.encode("utf-8"))
-                    json_filename = p.replace(".pickle", ".json")
-                    tarinfo = tarfile.TarInfo(
-                        name=self.strip_asset_filenames(json_filename, depth)
-                    )
-                    tarinfo.size = len(json_data.encode("utf-8"))
-                    tar.addfile(tarinfo, json_buffer)
-                else:
-                    tar.add(p, arcname=self.strip_asset_filenames(p, depth))
+        ) as archive:
+            for artifact in artifacts:
+                try:
+                    self._add_artifact_to_archive(archive, artifact)
+                except FileNotFoundError as error:
+                    raise RunArtifactsNotFoundError(
+                        [artifact.archive_path]
+                    ) from error
 
         tar_buffer.seek(0)
         return tar_buffer
+
+    def enumerate_run_artifacts(
+        self, run: Run, kind: RunArtifactKind
+    ) -> list[RunArtifact]:
+        """Return the canonical source, archive name, and encoding for a kind."""
+        depth = _ARTIFACT_DEPTHS[kind]
+        stems = self.assets_repository.get_assets_paths(
+            run, depth, self.testbench_settings
+        )
+        encoding: Literal["file", "numpy-json", "output-analysis-json"] = "file"
+        if kind == RunArtifactKind.SAMPLE_MASKS:
+            encoding = "numpy-json"
+        elif kind == RunArtifactKind.OUTPUT_ANALYSIS:
+            encoding = "output-analysis-json"
+
+        artifacts = []
+        for stem in stems:
+            source_path = Path(
+                self.assets_repository.resolve_asset_path(stem, depth)
+            )
+            artifacts.append(
+                RunArtifact(
+                    source_path=source_path,
+                    archive_path=self._get_artifact_archive_path(source_path, kind),
+                    encoding=encoding,
+                )
+            )
+        return artifacts
+
+    def _get_artifact_archive_path(
+        self, source_path: Path, kind: RunArtifactKind
+    ) -> str:
+        try:
+            relative_parts = source_path.resolve().relative_to(
+                self.assets_repository.get_root_folder()
+            ).parts
+        except ValueError as error:
+            raise RunArtifactConversionError(
+                "Run artifact is outside the configured artifact root"
+            ) from error
+
+        if kind == RunArtifactKind.ORIGINAL_TRACKS:
+            return source_path.name
+        if kind == RunArtifactKind.SAMPLE_MASKS:
+            return source_path.with_suffix(".json").name
+        if kind == RunArtifactKind.RECONSTRUCTED_TRACKS:
+            if len(relative_parts) < 3:
+                raise RunArtifactConversionError(
+                    "Reconstructed-track artifact path has an invalid layout"
+                )
+            original_track = self._without_suffix(
+                relative_parts[-3], "-lost_samples_masks"
+            )
+            sample_mask = self._without_suffix(
+                relative_parts[-2], "-reconstructed_tracks"
+            )
+            return "/".join([original_track, sample_mask, source_path.name])
+        if kind == RunArtifactKind.OUTPUT_ANALYSIS:
+            if len(relative_parts) < 4:
+                raise RunArtifactConversionError(
+                    "Output-analysis artifact path has an invalid layout"
+                )
+            original_track = self._without_suffix(
+                relative_parts[-4], "-lost_samples_masks"
+            )
+            sample_mask = self._without_suffix(
+                relative_parts[-3], "-reconstructed_tracks"
+            )
+            reconstructed_track = self._without_suffix(
+                relative_parts[-2], "-output_analyses"
+            )
+            return "/".join(
+                [
+                    original_track,
+                    sample_mask,
+                    reconstructed_track,
+                    source_path.with_suffix(".json").name,
+                ]
+            )
+        raise RunArtifactConversionError(f"Unsupported artifact kind: {kind.value}")
+
+    @staticmethod
+    def _without_suffix(value: str, suffix: str) -> str:
+        if not value.endswith(suffix):
+            raise RunArtifactConversionError(
+                f"Run artifact path component does not end with {suffix}"
+            )
+        return value[: -len(suffix)]
+
+    def _add_artifact_to_archive(
+        self, archive: tarfile.TarFile, artifact: RunArtifact
+    ) -> None:
+        if artifact.encoding == "file":
+            archive.add(artifact.source_path, arcname=artifact.archive_path)
+            return
+
+        try:
+            if artifact.encoding == "numpy-json":
+                # pi-lens-ignore: python-insecure-deserialization
+                # Sample masks are NumPy files written by our own testbench worker.
+                json_value = np.load(
+                    artifact.source_path, allow_pickle=True
+                ).tolist()
+            else:
+                with artifact.source_path.open("rb") as artifact_file:
+                    # Analyses are pickles written by our own testbench worker.
+                    # pi-lens-ignore: python-insecure-deserialization
+                    analysis: object = pickle.load(artifact_file)
+                if isinstance(analysis, SimpleCalculatorData):
+                    json_value = np.nan_to_num(
+                        analysis.get_error(), nan=0
+                    ).T.tolist()
+                elif isinstance(analysis, PEAQData):
+                    json_value = [analysis.get_di(), analysis.get_odg()]
+                elif isinstance(analysis, np.ndarray):
+                    json_value = analysis.tolist()
+                else:
+                    raise TypeError("Unsupported output-analysis value")
+
+            json_bytes = json.dumps(json_value).encode("utf-8")
+        except FileNotFoundError:
+            raise
+        except (
+            OSError,
+            EOFError,
+            ValueError,
+            TypeError,
+            AttributeError,
+            pickle.PickleError,
+        ) as error:
+            raise RunArtifactConversionError(
+                f"Could not convert run artifact '{artifact.archive_path}' to JSON"
+            ) from error
+
+        tar_info = tarfile.TarInfo(name=artifact.archive_path)
+        tar_info.size = len(json_bytes)
+        archive.addfile(tar_info, io.BytesIO(json_bytes))
 
     def get_testbench_settings(self) -> TestbenchConfiguration:
         config = get_configuration()
@@ -700,27 +842,6 @@ class RunsService:
 
     def get_module_settings_class_name(self, module: str) -> str:
         return f"{module}Settings"
-
-    def strip_asset_filenames(self, path, depth):
-        items = path.split("/")[2:]
-        if depth == TestbenchNodeDepth.ORIGINAL_TRACKS:
-            (original_track,) = tuple(items)
-            return "/".join([original_track])
-        if depth == TestbenchNodeDepth.RECONSTRUCTED_TRACKS:
-            original_track, sample_mask, reconstructed_track = tuple(items)
-            original_track = original_track.split("-")[0]
-            sample_mask = "-".join(sample_mask.split("-")[:2])
-            return "/".join([original_track, sample_mask, reconstructed_track])
-        if depth == TestbenchNodeDepth.OUTPUT_ANALYSIS:
-            original_track, sample_mask, reconstructed_track, output_analysis = tuple(
-                items
-            )
-            original_track = original_track.split("-")[0]
-            sample_mask = "-".join(sample_mask.split("-")[:2])
-            reconstructed_track = "-".join(reconstructed_track.split("-")[:2])
-            return "/".join(
-                [original_track, sample_mask, reconstructed_track, output_analysis]
-            )
 
     async def export_run_config(self, run_id: str) -> str:
         run = await self.find_by_id(run_id)

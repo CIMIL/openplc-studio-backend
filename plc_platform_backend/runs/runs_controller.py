@@ -1,13 +1,11 @@
 import io
-import os
-import tempfile
+from collections.abc import Iterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.background import BackgroundTasks
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 
-from plc_platform_backend.assets.assets_models import TestbenchNodeDepth
+from plc_platform_backend.assets.assets_models import RunArtifactKind
 from plc_platform_backend.modules.modules_service import (
     ModuleService,
     get_modules_service,
@@ -23,6 +21,9 @@ from plc_platform_backend.runs.runs_models import (
     SortDirection,
 )
 from plc_platform_backend.runs.runs_service import (
+    RunArtifactConversionError,
+    RunArtifactsNotFoundError,
+    RunArtifactsUnavailableError,
     RunNotDeletableError,
     RunNotExecutableError,
     RunPreparationError,
@@ -37,6 +38,17 @@ router = APIRouter(
     dependencies=[],
     responses={404: {"description": "Not found"}},
 )
+
+_ARCHIVE_CHUNK_SIZE = 1024 * 1024
+
+
+def _iter_buffer_chunks(buffer: io.BytesIO) -> Iterator[bytes]:
+    """Stream binary buffers in fixed chunks instead of newline-delimited chunks."""
+    try:
+        while chunk := buffer.read(_ARCHIVE_CHUNK_SIZE):
+            yield chunk
+    finally:
+        buffer.close()
 
 
 @router.post(
@@ -111,29 +123,59 @@ async def export_run_config(
     )
 
 
-@router.get("/{run_id}/assets/{depth}")
-async def get_run_assets_paths(
+@router.get(
+    "/{run_id}/artifacts/{kind}/archive",
+    summary="Download a run artifact archive",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Tar archive containing the requested run artifacts",
+            "content": {"application/x-tar": {}},
+        },
+        404: {"description": "Run or expected artifact not found"},
+        409: {"description": "Run artifacts are not available yet"},
+        422: {"description": "Invalid kind or artifact conversion failure"},
+    },
+    description=(
+        "Returns a tar archive for the named artifact kind. Original and "
+        "reconstructed tracks remain WAV files. Sample-mask NumPy files are "
+        "converted to JSON arrays. Pickled output analyses are converted to JSON; "
+        "SimpleCalculator errors are transposed with NaN values replaced by zero, "
+        "and PEAQ results are represented as `[DI, ODG]`."
+    ),
+)
+async def get_run_artifacts_archive(
     run_id: str,
-    depth: int,
+    kind: RunArtifactKind,
     runs_service: Annotated[RunsService, Depends(get_runs_service)],
-    background_tasks: BackgroundTasks,
-) -> FileResponse:
-    tar_archive: io.BytesIO = await runs_service.get_assets_tar_by_depth(
-        run_id, TestbenchNodeDepth(depth)
-    )
+) -> StreamingResponse:
+    try:
+        tar_archive = await runs_service.get_artifacts_archive(run_id, kind)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except RunArtifactsUnavailableError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except RunArtifactsNotFoundError as error:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": "One or more run artifacts were not found",
+                "artifacts": error.archive_paths,
+            },
+        ) from error
+    except RunArtifactConversionError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".tar") as tmp:
-        tmp.write(tar_archive.getvalue())
-        tmp.flush()
-        tmp = tmp.name
-
-    background_tasks.add_task(os.unlink, tmp)
-
-    return FileResponse(
-        tmp,
-        media_type="application/octet-stream",
-        filename=f"run_{run_id}_assets_depth_{depth}.tar",
-        background=background_tasks,
+    content_length = tar_archive.getbuffer().nbytes
+    return StreamingResponse(
+        _iter_buffer_chunks(tar_archive),
+        media_type="application/x-tar",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=run_{run_id}_{kind.value}.tar"
+            ),
+            "Content-Length": str(content_length),
+        },
     )
 
 
