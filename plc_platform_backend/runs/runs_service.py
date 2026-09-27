@@ -7,7 +7,6 @@ import logging
 import pickle
 import tarfile
 import threading
-import traceback
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -516,8 +515,8 @@ async def _launch_run(
         thread.join()
         if run_exception is not None:
             raise run_exception
-    except Exception as error:
-        traceback.print_exception(error)
+    except Exception:
+        logger.exception("Run %s (%s) failed during execution", run.id, run.name)
         await _transition_run_status(
             run.id,
             run.name,

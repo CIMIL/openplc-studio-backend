@@ -21,20 +21,14 @@ prepare_directories() {
 }
 
 run_api() {
-  exec uvicorn plc_platform_backend.main:app \
-    --host "${API_HOST:-0.0.0.0}" \
-    --port "${API_PORT:-8000}" \
-    --workers "${API_WORKERS:-1}" \
-    --proxy-headers \
-    --forwarded-allow-ips "${FORWARDED_ALLOW_IPS:-*}" \
-    --log-level "${LOG_LEVEL:-info}"
+  exec python -m plc_platform_backend.server
 }
 
 run_worker() {
   local delay=1
   while true; do
     local exit_code=0
-    dramatiq plc_platform_backend.actors || exit_code=$?
+    python -m plc_platform_backend.worker || exit_code=$?
     if [ "${exit_code}" -eq 3 ]; then
       log "Broker connection error on startup. Retrying in ${delay} second(s)..."
       sleep "${delay}"

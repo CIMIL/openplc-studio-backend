@@ -1,3 +1,4 @@
+import logging
 import os
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from typing import AsyncIterator, Callable, Sequence
@@ -6,14 +7,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from plc_platform_backend.commons.configuration.configuration import get_configuration
+from plc_platform_backend.commons.logging_config import configure_logging
 from plc_platform_backend.db import get_mongodb
 from plc_platform_backend.routers import assets, modules, plugins, runs, runs_ws
+
+configure_logging()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def storage_setup(app: FastAPI) -> AsyncIterator[None]:
-    print("storage lifespan")
-
     config = get_configuration()
     try:
         os.makedirs(config.plc_root_folder, exist_ok=True)
@@ -22,6 +25,7 @@ async def storage_setup(app: FastAPI) -> AsyncIterator[None]:
             f"Unable to prepare artifact directory: {config.plc_root_folder}"
         ) from exc
 
+    logger.info("Artifact storage is ready at %s", config.plc_root_folder)
     yield
 
 
@@ -33,13 +37,12 @@ async def db_setup(app: FastAPI) -> AsyncIterator[None]:
 
     if ping_response.get("ok") != 1:
         raise Exception("Problem connecting to database cluster.")
-    else:
-        print("Connected to database cluster.")
 
+    logger.info("Connected to the MongoDB cluster")
     yield
 
     # Shutdown
-    print("Shutting down db.")
+    logger.info("Closing the MongoDB client")
     mongodb = get_mongodb()
     mongodb.client.close()
 

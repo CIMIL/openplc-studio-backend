@@ -50,6 +50,12 @@ The API handles request validation, metadata, uploads, and run orchestration. CP
 | Test execution  | [`plctestbench`](https://github.com/CIMIL/plc-testbench) |
 | Packaging       | `uv`, Hatchling, Docker Buildx                           |
 
+## Logging
+
+The API, Uvicorn access/server logs, application modules, and Dramatiq workers use one standard logging configuration. Records are written to stderr as readable, non-colored text with a UTC timestamp, severity, process/thread context, logger name, and message.
+
+Set `LOG_LEVEL` to `trace`, `debug`, `info`, `warning`, `error`, or `critical`; the default is `info`. Invalid values stop the API or worker during startup with a configuration error.
+
 ## Container image
 
 The published image is [`cimil/openplc-studio-backend`](https://hub.docker.com/r/cimil/openplc-studio-backend). It is a multi-stage, non-root production image with the API health endpoint exposed on port `8000`.

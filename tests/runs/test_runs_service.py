@@ -517,10 +517,17 @@ class LaunchRunTests(IsolatedAsyncioTestCase):
                 "plc_platform_backend.runs.runs_service.PLCTestbench",
                 return_value=testbench,
             ),
-            patch("plc_platform_backend.runs.runs_service.traceback.print_exception"),
+            patch(
+                "plc_platform_backend.runs.runs_service.logger.exception"
+            ) as log_exception,
         ):
             await _launch_run(queued_run, repository, service, redis_client)
 
+        log_exception.assert_called_once_with(
+            "Run %s (%s) failed during execution",
+            queued_run.id,
+            queued_run.name,
+        )
         self.assertEqual(
             repository.transition_status.await_args_list[1].args,
             (queued_run.id, RunStatus.RUNNING, RunStatus.FAILED),
