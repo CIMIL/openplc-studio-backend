@@ -786,11 +786,8 @@ class RunsService:
 
         try:
             if artifact.encoding == "numpy-json":
-                # pi-lens-ignore: python-insecure-deserialization
-                # Sample masks are NumPy files written by our own testbench worker.
-                json_value = np.load(
-                    artifact.source_path, allow_pickle=True
-                ).tolist()
+                # Sample masks contain numeric arrays and never require pickle loading.
+                json_value = np.load(artifact.source_path, allow_pickle=False).tolist()
             else:
                 with artifact.source_path.open("rb") as artifact_file:
                     # Analyses are pickles written by our own testbench worker.

@@ -1,22 +1,19 @@
 from __future__ import annotations
 
-import ast
-import os
 from functools import lru_cache
-from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from plc_platform_backend.commons.configuration.configuration import get_configuration
 from plc_platform_backend.modules.modules_models import (
     ModuleParameterSpec,
     ModuleSpec,
     ModuleType,
 )
+from plc_platform_backend.plugins.plugins_service import get_plugins_service
 
-MODULES_MANIFEST_RESOURCE = files("plc_platform_backend.modules").joinpath("modules_manifest.yaml")
+MODULES_MANIFEST_RESOURCE = Path(__file__).with_name("modules_manifest.yaml")
 
 
 @lru_cache
@@ -45,8 +42,7 @@ class ModulesRepository:
         self,
     ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
         core_modules = _load_modules_manifest()
-        plugins = self.get_plugin_modules()
-        return core_modules, plugins
+        return core_modules, self.get_plugin_modules()
 
     def get_all_modules_by_type(self, module_type: ModuleType) -> list[ModuleSpec]:
         all_modules, plugins = self.get_all_modules()
@@ -80,35 +76,4 @@ class ModulesRepository:
         ]
 
     def get_plugin_modules(self) -> list[dict[str, Any]]:
-        plugins_path = Path(get_configuration().plugins_directory)
-
-        plugins: list[dict[str, Any]] = []
-
-        try:
-            plugin_files = [f for f in os.listdir(plugins_path) if f.endswith(".py")]
-        except OSError as error:
-            print(f"Error listing plugins in {plugins_path}: {error}")
-            return plugins
-
-        for plugin_file in plugin_files:
-            try:
-                with open(plugins_path / plugin_file, "r") as f:
-                    content = f.read()
-
-                tree = ast.parse(content)
-                docstring = ast.get_docstring(tree)
-
-                if not docstring:
-                    continue
-
-                yaml_data = yaml.safe_load(docstring)
-
-                if yaml_data and isinstance(yaml_data, list) and len(yaml_data) > 0:
-                    plugin_config = yaml_data[0]
-                    plugins.append(plugin_config)
-
-            except Exception as e:
-                print(f"Error parsing plugin {plugin_file}: {e}")
-                continue
-
-        return plugins
+        return [spec.model_dump() for spec in get_plugins_service().get_available_specs()]

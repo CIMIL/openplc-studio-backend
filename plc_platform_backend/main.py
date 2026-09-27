@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from plc_platform_backend.commons.configuration.configuration import get_configuration
 from plc_platform_backend.db import get_mongodb
-from plc_platform_backend.routers import assets, modules, runs, runs_ws
+from plc_platform_backend.routers import assets, modules, plugins, runs, runs_ws
 
 
 @asynccontextmanager
@@ -78,13 +78,14 @@ async def health() -> dict[str, str]:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=["http://localhost:4200", "http://127.0.0.1:4200"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(modules.router)
+app.include_router(plugins.router)
 app.include_router(runs.router)
 app.include_router(assets.router)
 app.include_router(runs_ws.router)
