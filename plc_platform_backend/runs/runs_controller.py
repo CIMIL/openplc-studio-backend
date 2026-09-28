@@ -15,6 +15,7 @@ from plc_platform_backend.runs.runs_models import (
     RunCreateDto,
     RunConfigDto,
     RunConfigValidationError,
+    RunDashboardSummary,
     RunPage,
     RunSortField,
     RunStatus,
@@ -85,6 +86,13 @@ async def execute_run(
         raise HTTPException(status_code=409, detail=str(error)) from error
     except RunQueueError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@router.get("/dashboard/summary")
+async def get_dashboard_summary(
+    runs_service: Annotated[RunsService, Depends(get_runs_service)],
+) -> RunDashboardSummary:
+    return await runs_service.get_dashboard_summary()
 
 
 @router.get("/{run_id}")

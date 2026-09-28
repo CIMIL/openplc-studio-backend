@@ -73,6 +73,22 @@ class RunPage(BaseModel):
     page_size: int
 
 
+class RunDashboardCounts(BaseModel):
+    running: int
+    queued: int
+    completed_recent: int
+    failed_recent: int
+
+
+class RunDashboardSummary(BaseModel):
+    generated_at: datetime
+    recent_window_days: int
+    counts: RunDashboardCounts
+    active_runs: list[Run]
+    recent_runs: list[Run]
+    failed_runs: list[Run]
+
+
 class NodeProgress(BaseModel):
     description: str
     node_id: str | None = None

@@ -83,6 +83,58 @@ class RunsRepository(BaseMongoDBRepository):
         )
         return [RunDocument(**run_data) for run_data in runs_data]
 
+    async def get_dashboard_snapshot(
+        self, cutoff: datetime, limit: int
+    ) -> dict:
+        active_statuses = [RunStatus.QUEUED.value, RunStatus.RUNNING.value]
+        terminal_statuses = [RunStatus.COMPLETED.value, RunStatus.FAILED.value]
+        pipeline = [
+            {
+                "$facet": {
+                    "active_counts": [
+                        {"$match": {"status": {"$in": active_statuses}}},
+                        {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+                    ],
+                    "recent_terminal_counts": [
+                        {
+                            "$match": {
+                                "status": {"$in": terminal_statuses},
+                                "updated": {"$gte": cutoff},
+                            }
+                        },
+                        {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+                    ],
+                    "active_runs": [
+                        {"$match": {"status": {"$in": active_statuses}}},
+                        {"$sort": {"updated": -1, "_id": -1}},
+                        {"$limit": limit},
+                    ],
+                    "recent_runs": [
+                        {"$sort": {"created": -1, "_id": -1}},
+                        {"$limit": limit},
+                    ],
+                    "failed_runs": [
+                        {
+                            "$match": {
+                                "status": RunStatus.FAILED.value,
+                                "updated": {"$gte": cutoff},
+                            }
+                        },
+                        {"$sort": {"updated": -1, "_id": -1}},
+                        {"$limit": limit},
+                    ],
+                }
+            }
+        ]
+        snapshots = await self.collection.aggregate(pipeline).to_list(length=1)
+        return snapshots[0] if snapshots else {
+            "active_counts": [],
+            "recent_terminal_counts": [],
+            "active_runs": [],
+            "recent_runs": [],
+            "failed_runs": [],
+        }
+
     @staticmethod
     def _build_page_filter(
         search: str | None,

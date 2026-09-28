@@ -1,5 +1,6 @@
 import io
 import os
+from datetime import datetime
 from unittest import TestCase
 from unittest.mock import AsyncMock
 
@@ -17,12 +18,48 @@ from plc_platform_backend.runs.runs_controller import (
     _iter_buffer_chunks,
     router,
 )
+from plc_platform_backend.runs.runs_models import (
+    RunDashboardCounts,
+    RunDashboardSummary,
+)
 from plc_platform_backend.runs.runs_service import (
     RunArtifactConversionError,
     RunArtifactsNotFoundError,
     RunArtifactsUnavailableError,
     get_runs_service,
 )
+
+
+class RunDashboardControllerTests(TestCase):
+    def setUp(self) -> None:
+        self.service = AsyncMock()
+        app = FastAPI()
+        app.include_router(router)
+        app.dependency_overrides[get_runs_service] = lambda: self.service
+        self.client = TestClient(app)
+
+    def test_returns_dashboard_summary_from_static_route(self) -> None:
+        self.service.get_dashboard_summary.return_value = RunDashboardSummary(
+            generated_at=datetime(2026, 1, 8, 12, 0, 0),
+            recent_window_days=7,
+            counts=RunDashboardCounts(
+                running=2,
+                queued=1,
+                completed_recent=4,
+                failed_recent=0,
+            ),
+            active_runs=[],
+            recent_runs=[],
+            failed_runs=[],
+        )
+
+        response = self.client.get("/runs/dashboard/summary")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["recent_window_days"], 7)
+        self.assertEqual(response.json()["counts"]["running"], 2)
+        self.service.get_dashboard_summary.assert_awaited_once_with()
+        self.service.find_by_id.assert_not_awaited()
 
 
 class RunArtifactsArchiveControllerTests(TestCase):

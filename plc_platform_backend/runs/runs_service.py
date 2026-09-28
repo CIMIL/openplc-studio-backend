@@ -8,6 +8,7 @@ import pickle
 import tarfile
 import threading
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -44,6 +45,9 @@ from plc_platform_backend.runs.runs_models import (
     Run,
     RunCompletionMessage,
     RunCreateDto,
+    RunDashboardCounts,
+    RunDashboardSummary,
+    RunDocument,
     RunPage,
     RunProgressMessage,
     RunSortField,
@@ -68,6 +72,8 @@ from plc_platform_backend.runs.runs_models import (
 )
 
 _PROGRESS_POLL_INTERVAL = 0.1
+_DASHBOARD_RECENT_WINDOW_DAYS = 7
+_DASHBOARD_LIST_LIMIT = 5
 logger = logging.getLogger(__name__)
 
 _ARTIFACT_DEPTHS = {
@@ -634,6 +640,48 @@ class RunsService:
             total=total,
             page=page,
             page_size=page_size,
+        )
+
+    async def get_dashboard_summary(self) -> RunDashboardSummary:
+        generated_at = datetime.utcnow()
+        cutoff = generated_at - timedelta(days=_DASHBOARD_RECENT_WINDOW_DAYS)
+        snapshot = await self.runs_repository.get_dashboard_snapshot(
+            cutoff, _DASHBOARD_LIST_LIMIT
+        )
+
+        active_counts = {
+            item["_id"]: item["count"] for item in snapshot["active_counts"]
+        }
+        recent_terminal_counts = {
+            item["_id"]: item["count"]
+            for item in snapshot["recent_terminal_counts"]
+        }
+
+        return RunDashboardSummary(
+            generated_at=generated_at,
+            recent_window_days=_DASHBOARD_RECENT_WINDOW_DAYS,
+            counts=RunDashboardCounts(
+                running=active_counts.get(RunStatus.RUNNING.value, 0),
+                queued=active_counts.get(RunStatus.QUEUED.value, 0),
+                completed_recent=recent_terminal_counts.get(
+                    RunStatus.COMPLETED.value, 0
+                ),
+                failed_recent=recent_terminal_counts.get(
+                    RunStatus.FAILED.value, 0
+                ),
+            ),
+            active_runs=[
+                Run.from_document(RunDocument(**document))
+                for document in snapshot["active_runs"]
+            ],
+            recent_runs=[
+                Run.from_document(RunDocument(**document))
+                for document in snapshot["recent_runs"]
+            ],
+            failed_runs=[
+                Run.from_document(RunDocument(**document))
+                for document in snapshot["failed_runs"]
+            ],
         )
 
     async def delete_run(self, run_id: str) -> None:

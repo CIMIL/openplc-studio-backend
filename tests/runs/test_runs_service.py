@@ -164,6 +164,48 @@ class RunArtifactsArchiveTests(IsolatedAsyncioTestCase):
         )
 
 
+class RunsServiceDashboardTests(IsolatedAsyncioTestCase):
+    async def test_builds_dashboard_summary_and_defaults_missing_counts(self) -> None:
+        active = make_run_document(RunStatus.RUNNING).model_dump(
+            by_alias=True
+        )
+        recent = make_run_document(RunStatus.COMPLETED).model_dump(
+            by_alias=True
+        )
+        failed = make_run_document(RunStatus.FAILED).model_dump(
+            by_alias=True
+        )
+        repository = SimpleNamespace(
+            get_dashboard_snapshot=AsyncMock(
+                return_value={
+                    "active_counts": [{"_id": "running", "count": 2}],
+                    "recent_terminal_counts": [
+                        {"_id": "completed", "count": 4}
+                    ],
+                    "active_runs": [active],
+                    "recent_runs": [recent],
+                    "failed_runs": [failed],
+                }
+            )
+        )
+        service = RunsService.__new__(RunsService)
+        service.runs_repository = repository
+
+        summary = await service.get_dashboard_summary()
+
+        self.assertEqual(summary.recent_window_days, 7)
+        self.assertEqual(summary.counts.running, 2)
+        self.assertEqual(summary.counts.queued, 0)
+        self.assertEqual(summary.counts.completed_recent, 4)
+        self.assertEqual(summary.counts.failed_recent, 0)
+        self.assertEqual(summary.active_runs[0].status, RunStatus.RUNNING)
+        self.assertEqual(summary.recent_runs[0].status, RunStatus.COMPLETED)
+        self.assertEqual(summary.failed_runs[0].status, RunStatus.FAILED)
+        cutoff, limit = repository.get_dashboard_snapshot.await_args.args
+        self.assertEqual(limit, 5)
+        self.assertEqual((summary.generated_at - cutoff).days, 7)
+
+
 class RunsServiceDeleteRunTests(IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.service = RunsService.__new__(RunsService)
