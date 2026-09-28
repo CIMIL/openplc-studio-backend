@@ -19,6 +19,7 @@ Backend service for **OpenPLC Studio**, a platform for configuring, executing, a
 - Discovers codec and testbench modules and exposes their configurable parameters.
 - Validates, persists, and executes test-run configurations.
 - Runs long-lived processing work asynchronously and reports progress in real time.
+- Serves the documentation generated from the installed `plctestbench` package at `/plctestbench-docs/`.
 - Stores run metadata in MongoDB and generated artifacts on persistent storage.
 - Exports run configurations and generated assets for reproducibility and inspection.
 
@@ -66,6 +67,8 @@ The published image is [`cimil/openplc-studio-backend`](https://hub.docker.com/r
 | `sha-<commit>` | Immutable build for a specific source revision |
 
 Production images target **`linux/amd64`**. They are consumed by the [OpenPLC Studio deployment repository](https://github.com/CIMIL/openplc-studio), which supplies the surrounding services, routing, persistent volumes, and runtime configuration.
+
+The image build runs `plctestbench-docs build --strict --profile embedded` against the locked package version and copies only the generated static site into the runtime image. This profile uses the application-specific introduction and excludes the standalone package introduction, getting-started pages, and repository links. Set `PLCTESTBENCH_DOCS_DIRECTORY` only when serving a site from a non-default location. If the site is missing, only the documentation route returns `503`; the API continues to start normally. In the local Compose workflow, rebuild the backend image after changing documentation sources; restarting the API does not regenerate the site.
 
 ## Repository layout
 

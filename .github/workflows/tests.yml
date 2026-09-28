@@ -40,5 +40,10 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
+      - name: Build PLCTestbench documentation
+        run: >-
+          uv run --group docs plctestbench-docs build .docs-site --strict
+          --profile embedded
+
       - name: Run tests
         run: uv run --with pytest pytest

@@ -85,6 +85,7 @@ class ModuleSpec(BaseModel):
     name: str
     settings: list[ModuleParameterSpec]
     constraints: list[ModuleConstraint] = Field(default_factory=lambda: [])
+    is_plugin: bool = False
 
 
 class Module(BaseModel):

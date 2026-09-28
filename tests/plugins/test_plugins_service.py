@@ -63,6 +63,7 @@ class PluginsServiceTests(TestCase):
         self.assertIsNotNone(plugin.spec)
         assert plugin.spec is not None
         self.assertEqual(plugin.spec.name, "Demo")
+        self.assertTrue(plugin.spec.is_plugin)
         self.assertEqual(plugin.spec.settings[0].name, "strength")
         self.assertIsNone(plugin.error)
 
@@ -146,3 +147,5 @@ class PluginsServiceTests(TestCase):
 
         self.assertIn("Demo", [module.name for module in modules])
         self.assertNotIn("Broken", [module.name for module in modules])
+        self.assertTrue(next(module for module in modules if module.name == "Demo").is_plugin)
+        self.assertFalse(next(module for module in modules if module.name == "AdvancedPLC").is_plugin)

@@ -44,14 +44,9 @@ RUN sed -i \
     && grep -F 'plctestbench = { path = "../plc-testbench", editable = true }' pyproject.toml \
     && uv sync --no-install-project --no-install-package plctestbench
 
-# Copy sources without overwriting the development-only pyproject.toml above,
-# then install both editable projects and the development dependency group.
-COPY plc-platform-backend/README.md ./README.md
-COPY plc-platform-backend/.docker ./.docker
-COPY plc-platform-backend/plc_platform_backend ./plc_platform_backend
-COPY ./plc-testbench /app/plc-testbench
-RUN uv sync
-
+# Runtime and development libraries change less often than the package-owned
+# documentation. Install them before copying sources so docs-only rebuilds can
+# reuse this expensive layer.
 RUN  apt-get update &&  apt-get install -y libgstreamer1.0-dev \
     libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
     gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
@@ -61,6 +56,15 @@ RUN  apt-get update &&  apt-get install -y libgstreamer1.0-dev \
     gstreamer1.0-qt5 gstreamer1.0-pulseaudio \
     gtk-doc-tools git2cl automake libtool \
     build-essential autoconf pkg-config m4
+
+# Copy sources without overwriting the development-only pyproject.toml above,
+# then install both editable projects and build the embedded documentation.
+COPY plc-platform-backend/README.md ./README.md
+COPY plc-platform-backend/.docker ./.docker
+COPY plc-platform-backend/plc_platform_backend ./plc_platform_backend
+COPY ./plc-testbench /app/plc-testbench
+RUN uv sync --group docs \
+    && uv run --no-sync plctestbench-docs build /app/backend/static/plctestbench-docs --strict --profile embedded
 
 COPY --from=peaq-builder --chmod=755 /usr/lib/gstreamer-1.0/ /usr/lib/gstreamer-1.0/
 

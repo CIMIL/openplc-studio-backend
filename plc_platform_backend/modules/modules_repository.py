@@ -64,6 +64,7 @@ class ModulesRepository:
                     ModuleSpec(
                         name=module["name"],
                         settings=self._parse_settings(module),
+                        is_plugin=True,
                     )
                 )
 

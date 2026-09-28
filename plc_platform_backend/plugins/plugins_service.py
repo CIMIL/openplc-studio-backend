@@ -84,7 +84,7 @@ class PluginsService:
         if not isinstance(manifest[0], dict):
             raise ValueError("Plugin manifest entry must be an object")
 
-        return ModuleSpec.model_validate(manifest[0])
+        return ModuleSpec.model_validate({**manifest[0], "is_plugin": True})
 
     @staticmethod
     def _validate_runtime_shape(filename: str, tree: ast.Module, spec: ModuleSpec) -> None:

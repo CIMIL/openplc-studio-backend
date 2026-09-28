@@ -66,7 +66,14 @@ COPY README.md ./
 COPY plc_platform_backend ./plc_platform_backend
 RUN uv sync --locked --no-dev --no-editable
 
-# Keep compilers, git, uv, and dependency source trees out of the final image.
+# Build the package-owned documentation with opt-in tooling. The runtime stage
+# copies only the generated site, not this stage's expanded virtual environment.
+FROM python-builder AS documentation-builder
+RUN uv sync --locked --no-dev --group docs --no-editable \
+    && .venv/bin/plctestbench-docs build /app/backend/static/plctestbench-docs --strict --profile embedded
+
+# Keep compilers, git, uv, documentation tooling, and dependency source trees
+# out of the final image.
 FROM python:${PYTHON_VERSION} AS runtime
 
 ENV PATH=/app/backend/.venv/bin:$PATH \
@@ -94,6 +101,7 @@ RUN apt-get update \
     && chown -R app:app /app
 
 COPY --from=python-builder --chown=app:app /app/backend/.venv /app/backend/.venv
+COPY --from=documentation-builder --chown=app:app /app/backend/static /app/backend/static
 COPY --from=peaq-builder /usr/lib/gstreamer-1.0/ /usr/lib/gstreamer-1.0/
 COPY --from=peaq-builder /usr/local/bin/peaq /usr/local/bin/peaq
 COPY --chown=app:app --chmod=755 .docker/docker-entrypoint.prod.sh \

@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from plc_platform_backend.commons.configuration.configuration import get_configuration
 from plc_platform_backend.commons.logging_config import configure_logging
 from plc_platform_backend.db import get_mongodb
+from plc_platform_backend.documentation import mount_documentation
 from plc_platform_backend.routers import assets, modules, plugins, runs, runs_ws
 
 configure_logging()
@@ -72,6 +73,7 @@ class Lifespans:
 
 
 app = FastAPI(lifespan=Lifespans([db_setup, storage_setup]))
+mount_documentation(app)
 
 
 @app.get("/health", tags=["health"])
