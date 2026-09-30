@@ -2,7 +2,7 @@ name: Publish Docker image
 
 on:
   push:
-    branches: [master]
+    branches: [master, staging]
   workflow_dispatch:
 
 permissions:
@@ -16,6 +16,8 @@ env:
   DOCKERHUB_NAMESPACE: >-
     ${{ vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_USERNAME }}
   IMAGE_REPOSITORY: openplc-studio-backend
+  INFRA_REPOSITORY: >-
+    ${{ vars.INFRA_REPOSITORY || 'filippodaniotti/openplc-studio-infra' }}
 
 jobs:
   tests:
@@ -50,13 +52,16 @@ jobs:
           images: >-
             ${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ github.ref_name == 'master' }}
+            type=raw,value=prod,enable=${{ github.ref_name == 'master' }}
+            type=raw,value=staging,enable=${{ github.ref_name == 'staging' }}
             type=sha,format=long,prefix=sha-
           labels: |
             org.opencontainers.image.title=PLC Platform Backend
             org.opencontainers.image.description=OpenPLC Studio backend
 
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
@@ -69,6 +74,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Publish Docker Hub README
+        if: github.ref == 'refs/heads/master'
         # yamllint disable-line rule:line-length
         uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa
         with:
@@ -79,3 +85,28 @@ jobs:
           repository: ${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}
           short-description: OpenPLC Studio backend
           readme-filepath: ./README.md
+
+      - name: Record desired image in private infrastructure repository
+        if: github.ref_name == 'master' || github.ref_name == 'staging'
+        env:
+          GH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_NAME: >-
+            ${{ env.DOCKERHUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+        run: |
+          payload="$(jq -n \
+            --arg component backend \
+            --arg branch "${SOURCE_BRANCH}" \
+            --arg image_repository "${IMAGE_NAME}" \
+            --arg digest "${IMAGE_DIGEST}" \
+            --arg source_sha "${SOURCE_SHA}" \
+            '{event_type:"image_published",client_payload:{component:$component,branch:$branch,image_repository:$image_repository,digest:$digest,source_sha:$source_sha}}')"
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${INFRA_REPOSITORY}/dispatches" \
+            --data "${payload}"
