@@ -24,7 +24,7 @@ docs = [
 ]
 
 [tool.uv.sources]
-plctestbench = { git = "https://github.com/CIMIL/plc-testbench", rev = "28f35910745b3ecb15d72bd1e0cfdab944a68819" }
+plctestbench = { git = "https://github.com/CIMIL/plc-testbench", rev = "1b8fd94db1a4f9170feaa63cc825b248e06727cc" }
 
 [build-system]
 requires = ["hatchling"]
