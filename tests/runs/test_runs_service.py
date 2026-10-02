@@ -39,10 +39,43 @@ from plc_platform_backend.runs.runs_service import (
     RunQueueError,
     RunsService,
     _build_testbench_from_config,
+    _get_hydrated_module_settings,
     _launch_run,
+    _resolve_bundled_model_path,
     _transition_run_status,
 )
 from plctestbench.output_analyser import SimpleCalculatorData
+from plctestbench.settings import PARCnetConfigPreset, PARCnetPLCSettings
+
+
+def test_resolves_bundled_deep_learning_models_from_installed_package() -> None:
+    for model_name in (
+        "parcnet-is2_mplc_challenge.onnx",
+        "model_bs256_100epochs_0.01_1e-3_1e-7.onnx",
+    ):
+        resolved = Path(_resolve_bundled_model_path(f"dl_models/{model_name}"))
+        assert resolved.is_file()
+        assert resolved.name == model_name
+        assert resolved.parent.name == "dl_models"
+
+
+def test_hydrates_parcnet_config_preset_as_enum() -> None:
+    hydrated = _get_hydrated_module_settings(
+        [ModuleParameter(name="config_preset", value="is2_mplc_challenge")],
+        SimpleNamespace(),
+    )
+
+    assert hydrated == [
+        ModuleParameter(
+            name="config_preset",
+            value=PARCnetConfigPreset.is2_mplc_challenge,
+        )
+    ]
+
+    settings = PARCnetPLCSettings(**{item.name: item.value for item in hydrated})
+    assert settings.get("extra_packet_dim") == 256
+
+
 
 
 class RunArtifactsArchiveTests(IsolatedAsyncioTestCase):

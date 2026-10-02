@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import plctestbench.loss_simulator
@@ -21,7 +21,11 @@ import redis.asyncio as aioredis
 from plctestbench.models import DBPlatform, TestbenchConfiguration
 from plctestbench.output_analyser import PEAQData, SimpleCalculatorData
 from plctestbench.plc_testbench import PLCTestbench
-from plctestbench.settings import CrossfadeSettings, OriginalAudioSettings
+from plctestbench.settings import (
+    CrossfadeSettings,
+    OriginalAudioSettings,
+    PARCnetConfigPreset,
+)
 from plctestbench.utils import get_class
 from plctestbench.worker import OriginalAudio
 
@@ -161,6 +165,16 @@ def _hydrate_crossfade_settings(crossfade_list: list) -> list[CrossfadeSettings]
     return result
 
 
+def _resolve_bundled_model_path(value: Any) -> Any:
+    if not isinstance(value, str) or Path(value).is_absolute():
+        return value
+
+    bundled_model = (
+        Path(plctestbench.__file__).resolve().parent / "dl_models" / Path(value).name
+    )
+    return str(bundled_model) if bundled_model.is_file() else value
+
+
 def _get_hydrated_module_settings(
     settings: list[ModuleParameter], run_service: RunsService
 ):
@@ -177,6 +191,21 @@ def _get_hydrated_module_settings(
         elif s.name == "fade_in":
             hydrated_module_settings.append(
                 ModuleParameter(name=s.name, value=_hydrate_crossfade_settings(s.value))
+            )
+        elif s.name in {"model_path", "dl_model_path"}:
+            hydrated_module_settings.append(
+                ModuleParameter(
+                    name=s.name,
+                    value=_resolve_bundled_model_path(s.value),
+                )
+            )
+        elif s.name == "config_preset":
+            # The API receives enum values as strings. Older plctestbench
+            # releases compare this setting directly with PARCnetConfigPreset;
+            # passing the raw string leaves the preset-dependent settings
+            # (including extra_packet_dim) unset.
+            hydrated_module_settings.append(
+                ModuleParameter(name=s.name, value=PARCnetConfigPreset(s.value))
             )
         elif s.name == "crossfade_frequencies" and s.value:
             try:
