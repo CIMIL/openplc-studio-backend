@@ -93,7 +93,9 @@ class RunArtifactsArchiveTests(IsolatedAsyncioTestCase):
 
         original.with_suffix(".wav").write_bytes(b"original wav")
         sample_mask.parent.mkdir(parents=True)
-        np.save(sample_mask.with_suffix(".npy"), np.array([10, 20]))
+        with sample_mask.with_suffix(".npy").open("wb") as sample_mask_file:
+            # DataFile uses pickle serialization even though masks use .npy.
+            pickle.dump(np.array([10, 20]), sample_mask_file)
         reconstructed.parent.mkdir(parents=True)
         reconstructed.with_suffix(".wav").write_bytes(b"reconstructed wav")
         output_analysis.parent.mkdir(parents=True)

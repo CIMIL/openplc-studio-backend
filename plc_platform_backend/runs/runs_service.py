@@ -90,7 +90,7 @@ _ARTIFACT_DEPTHS = {
 class RunArtifact:
     source_path: Path
     archive_path: str
-    encoding: Literal["file", "numpy-json", "output-analysis-json"]
+    encoding: Literal["file", "pickle-array-json", "output-analysis-json"]
 
 
 class RunNotDeletableError(Exception):
@@ -746,9 +746,11 @@ class RunsService:
         stems = self.assets_repository.get_assets_paths(
             run, depth, self.testbench_settings
         )
-        encoding: Literal["file", "numpy-json", "output-analysis-json"] = "file"
+        encoding: Literal[
+            "file", "pickle-array-json", "output-analysis-json"
+        ] = "file"
         if kind == RunArtifactKind.SAMPLE_MASKS:
-            encoding = "numpy-json"
+            encoding = "pickle-array-json"
         elif kind == RunArtifactKind.OUTPUT_ANALYSIS:
             encoding = "output-analysis-json"
 
@@ -834,9 +836,15 @@ class RunsService:
             return
 
         try:
-            if artifact.encoding == "numpy-json":
-                # Sample masks contain numeric arrays and never require pickle loading.
-                json_value = np.load(artifact.source_path, allow_pickle=False).tolist()
+            if artifact.encoding == "pickle-array-json":
+                with artifact.source_path.open("rb") as artifact_file:
+                    # DataFile writes sample masks with pickle despite the .npy suffix.
+                    # These are trusted artifacts created by our own testbench worker.
+                    # pi-lens-ignore: python-insecure-deserialization
+                    sample_mask: object = pickle.load(artifact_file)
+                if not isinstance(sample_mask, np.ndarray):
+                    raise TypeError("Unsupported sample-mask value")
+                json_value = sample_mask.tolist()
             else:
                 with artifact.source_path.open("rb") as artifact_file:
                     # Analyses are pickles written by our own testbench worker.
