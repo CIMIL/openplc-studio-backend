@@ -76,6 +76,8 @@ _DASHBOARD_RECENT_WINDOW_DAYS = 7
 _DASHBOARD_LIST_LIMIT = 5
 logger = logging.getLogger(__name__)
 
+_SCALAR_OUTPUT_ANALYSERS = {"PLCMOSCalculator", "PESQCalculator"}
+
 _ARTIFACT_DEPTHS = {
     RunArtifactKind.ORIGINAL_TRACKS: TestbenchNodeDepth.ORIGINAL_TRACKS,
     RunArtifactKind.SAMPLE_MASKS: TestbenchNodeDepth.SAMPLE_MASKS,
@@ -841,9 +843,16 @@ class RunsService:
                     # pi-lens-ignore: python-insecure-deserialization
                     analysis: object = pickle.load(artifact_file)
                 if isinstance(analysis, SimpleCalculatorData):
-                    json_value = np.nan_to_num(
-                        analysis.get_error(), nan=0
-                    ).T.tolist()
+                    error = np.nan_to_num(analysis.get_error(), nan=0)
+                    analyser_stem = Path(artifact.archive_path).stem
+                    is_scalar_analyser = any(
+                        analyser_stem.startswith(f"{name}-")
+                        for name in _SCALAR_OUTPUT_ANALYSERS
+                    )
+                    if is_scalar_analyser and error.size == 1:
+                        json_value = error.reshape(-1)[0].item()
+                    else:
+                        json_value = error.T.tolist()
                 elif isinstance(analysis, PEAQData):
                     json_value = [analysis.get_di(), analysis.get_odg()]
                 elif isinstance(analysis, np.ndarray):

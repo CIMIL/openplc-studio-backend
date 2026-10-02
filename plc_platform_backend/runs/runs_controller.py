@@ -148,8 +148,9 @@ async def export_run_config(
         "Returns a tar archive for the named artifact kind. Original and "
         "reconstructed tracks remain WAV files. Sample-mask NumPy files are "
         "converted to JSON arrays. Pickled output analyses are converted to JSON; "
-        "SimpleCalculator errors are transposed with NaN values replaced by zero, "
-        "and PEAQ results are represented as `[DI, ODG]`."
+        "SimpleCalculator errors are transposed with NaN values replaced by zero; "
+        "whole-track SimpleCalculator results are JSON numbers, and PEAQ results "
+        "are represented as `[DI, ODG]`."
     ),
 )
 async def get_run_artifacts_archive(

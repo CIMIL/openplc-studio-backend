@@ -655,6 +655,30 @@ OutputAnalyser:
         default: 128
         values: null
 
+  - name: PLCMOSCalculator
+    settings:
+      - name: plcmos_model
+        type: Enum
+        default: "2"
+        values:
+          - "0"
+          - 0alpha
+          - 2-val
+          - "2"
+      - name: request_intrusive
+        type: bool
+        default: true
+        values: null
+
+  - name: PESQCalculator
+    settings:
+      - name: pesq_mode
+        type: Enum
+        default: wb
+        values:
+          - wb
+          - nb
+
 CrossfadeSettings:
   - name: NoCrossfadeSettings
     settings:

@@ -38,3 +38,69 @@ def test_spectral_energy_calculator_is_exposed_with_testbench_defaults(monkeypat
     )
 
     assert messages == []
+
+
+def test_whole_track_quality_calculators_are_exposed_with_supported_settings():
+    modules = ModulesRepository().get_all_modules_by_type(ModuleType.OutputAnalyser)
+    by_name = {module.name: module for module in modules}
+
+    plcmos = by_name["PLCMOSCalculator"]
+    assert [
+        (setting.name, setting.type, setting.default, setting.values)
+        for setting in plcmos.settings
+    ] == [
+        ("plcmos_model", "Enum", "2", ["0", "0alpha", "2-val", "2"]),
+        ("request_intrusive", "bool", True, None),
+    ]
+
+    pesq = by_name["PESQCalculator"]
+    assert [
+        (setting.name, setting.type, setting.default, setting.values)
+        for setting in pesq.settings
+    ] == [("pesq_mode", "Enum", "wb", ["wb", "nb"])]
+
+
+def test_whole_track_quality_calculator_settings_are_validated():
+    validator = ModuleConfigValidator(ModuleService())
+
+    assert validator.validate_module(
+        ModuleType.OutputAnalyser,
+        Module(
+            name="PLCMOSCalculator",
+            settings=[
+                ModuleParameter(name="plcmos_model", value="2-val"),
+                ModuleParameter(name="request_intrusive", value=False),
+            ],
+        ),
+    ) == []
+    assert validator.validate_module(
+        ModuleType.OutputAnalyser,
+        Module(
+            name="PESQCalculator",
+            settings=[ModuleParameter(name="pesq_mode", value="nb")],
+        ),
+    ) == []
+
+    plcmos_errors = validator.validate_module(
+        ModuleType.OutputAnalyser,
+        Module(
+            name="PLCMOSCalculator",
+            settings=[
+                ModuleParameter(name="plcmos_model", value="invalid"),
+                ModuleParameter(name="request_intrusive", value="yes"),
+            ],
+        ),
+    )
+    assert [message.setting for message in plcmos_errors] == [
+        "plcmos_model",
+        "request_intrusive",
+    ]
+
+    pesq_errors = validator.validate_module(
+        ModuleType.OutputAnalyser,
+        Module(
+            name="PESQCalculator",
+            settings=[ModuleParameter(name="pesq_mode", value="invalid")],
+        ),
+    )
+    assert [message.setting for message in pesq_errors] == ["pesq_mode"]

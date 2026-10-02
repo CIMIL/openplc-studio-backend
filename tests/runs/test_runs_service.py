@@ -139,6 +139,24 @@ class RunArtifactsArchiveTests(IsolatedAsyncioTestCase):
                 else:
                     self.assertEqual(json.loads(content), expected_content)
 
+    async def test_serializes_whole_track_simple_calculator_results_as_json_numbers(self) -> None:
+        original_stem = self.stems[TestbenchNodeDepth.OUTPUT_ANALYSIS]
+        scalar_stem = original_stem.with_name("PLCMOSCalculator-9")
+        original_stem.with_suffix(".pickle").rename(scalar_stem.with_suffix(".pickle"))
+        self.stems[TestbenchNodeDepth.OUTPUT_ANALYSIS] = scalar_stem
+        output_path = scalar_stem.with_suffix(".pickle")
+        with output_path.open("wb") as output_file:
+            pickle.dump(SimpleCalculatorData(3.75), output_file)
+
+        archive_buffer = await self.service.get_artifacts_archive(
+            "507f1f77bcf86cd799439011", RunArtifactKind.OUTPUT_ANALYSIS
+        )
+
+        with tarfile.open(fileobj=archive_buffer, mode="r:") as archive:
+            member = archive.extractfile(archive.getnames()[0])
+            self.assertIsNotNone(member)
+            self.assertEqual(json.loads(member.read()), 3.75)
+
     async def test_rejects_artifacts_for_incomplete_run(self) -> None:
         self.service.find_by_id.return_value = Run.from_document(make_run_document())
 
