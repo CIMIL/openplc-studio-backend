@@ -25,6 +25,7 @@ from plc_platform_backend.modules.modules_models import (
     ModuleParameter,
     ModuleType,
 )
+from plc_platform_backend.modules.modules_service import ModuleService
 from plc_platform_backend.runs.runs_models import (
     Run,
     RunCreateDto,
@@ -57,6 +58,63 @@ def test_resolves_bundled_deep_learning_models_from_installed_package() -> None:
         assert resolved.is_file()
         assert resolved.name == model_name
         assert resolved.parent.name == "dl_models"
+
+
+def test_packet_size_compatibility_checks_top_level_and_nested_algorithms() -> None:
+    modules = {
+        ModuleType.PacketLossSimulator: [
+            Module(
+                name="BinomialPLS",
+                settings=[ModuleParameter(name="packet_size", value=32)],
+            )
+        ],
+        ModuleType.PLCAlgorithm: [
+            Module(name="VermaPLC", settings=[]),
+            Module(
+                name="AdvancedPLC",
+                settings=[
+                    ModuleParameter(
+                        name="band_settings",
+                        value={
+                            "left": [
+                                {"name": "PARCnetPLC", "settings": []},
+                            ]
+                        },
+                    )
+                ],
+            ),
+        ],
+        ModuleType.OutputAnalyser: [],
+    }
+
+    errors = RunsService._validate_packet_size_compatibility(
+        modules, ModuleService()
+    )
+
+    assert len(errors) == 2
+    assert any(error.module_name == "VermaPLC" for error in errors)
+    assert any("AdvancedPLC.band_settings.left[0].PARCnetPLC" == error.module_name for error in errors)
+    assert all("BinomialPLS uses 32" in error.error for error in errors)
+
+
+def test_packet_size_compatibility_allows_supported_and_unrestricted_algorithms() -> None:
+    modules = {
+        ModuleType.PacketLossSimulator: [
+            Module(
+                name="BinomialPLS",
+                settings=[ModuleParameter(name="packet_size", value=128)],
+            )
+        ],
+        ModuleType.PLCAlgorithm: [
+            Module(name="VermaPLC", settings=[]),
+            Module(name="ZerosPLC", settings=[]),
+        ],
+        ModuleType.OutputAnalyser: [],
+    }
+
+    assert RunsService._validate_packet_size_compatibility(
+        modules, ModuleService()
+    ) == []
 
 
 def test_hydrates_parcnet_config_preset_as_enum() -> None:

@@ -13,6 +13,7 @@ from plc_platform_backend.plugins.plugins_service import PluginsService
 
 VALID_PLUGIN = '''"""
 - name: Demo
+  supported_packet_sizes: [128]
   settings:
     - name: strength
       type: float
@@ -64,6 +65,7 @@ class PluginsServiceTests(TestCase):
         assert plugin.spec is not None
         self.assertEqual(plugin.spec.name, "Demo")
         self.assertTrue(plugin.spec.is_plugin)
+        self.assertEqual(plugin.spec.supported_packet_sizes, [128])
         self.assertEqual(plugin.spec.settings[0].name, "strength")
         self.assertIsNone(plugin.error)
 
@@ -147,5 +149,7 @@ class PluginsServiceTests(TestCase):
 
         self.assertIn("Demo", [module.name for module in modules])
         self.assertNotIn("Broken", [module.name for module in modules])
-        self.assertTrue(next(module for module in modules if module.name == "Demo").is_plugin)
+        demo = next(module for module in modules if module.name == "Demo")
+        self.assertTrue(demo.is_plugin)
+        self.assertEqual(demo.supported_packet_sizes, [128])
         self.assertFalse(next(module for module in modules if module.name == "AdvancedPLC").is_plugin)

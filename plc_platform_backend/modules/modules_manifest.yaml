@@ -389,6 +389,8 @@ PLCAlgorithm:
           crossfade frequencies.
 
   - name: VermaPLC
+    supported_packet_sizes:
+      - 128
     settings:
       - name: crossfade
         type: list_CrossfadeSettings
@@ -477,34 +479,9 @@ PLCAlgorithm:
         message: "The lower edge must be less than the upper edge."
 
   - name: PARCnetPLC
+    supported_packet_sizes:
+      - 512
     settings:
-      - name: crossfade
-        type: list_CrossfadeSettings
-        default:
-          - name: NoCrossfadeSettings
-            settings: []
-        values: null
-      - name: fade_in
-        type: list_CrossfadeSettings
-        default:
-          - name: NoCrossfadeSettings
-            settings: []
-        values: null
-      - name: crossfade_frequencies
-        type: list_int
-        default: []
-        values: null
-        validation:
-          item:
-            min: 0
-            max: 20000
-          sorted: ascending
-      - name: crossover_order
-        type: int
-        default: 4
-        values: null
-        validation:
-          min: 1
       - name: config_preset
         type: Enum
         default: is2_mplc_challenge

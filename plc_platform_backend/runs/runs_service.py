@@ -1016,4 +1016,96 @@ class RunsService:
                         )
                     )
 
+        errors.extend(self._validate_packet_size_compatibility(modules, modules_service))
         return errors
+
+    @staticmethod
+    def _validate_packet_size_compatibility(
+        modules: dict[ModuleType, list[Module]],
+        modules_service: ModuleService,
+    ) -> list[RunConfigValidationError]:
+        def get_attr(value: Any, name: str) -> Any:
+            return value.get(name) if isinstance(value, dict) else getattr(value, name, None)
+
+        def setting_values(module: Any) -> dict[str, Any]:
+            return {
+                get_attr(setting, "name"): get_attr(setting, "value")
+                for setting in get_attr(module, "settings") or []
+            }
+
+        def constrained_plcs(
+            module: Any, location: str, depth: int = 0
+        ) -> list[tuple[str, str, list[int]]]:
+            if depth > 3:
+                return []
+            module_name = get_attr(module, "name")
+            spec = modules_service.get_module_spec(module_name, ModuleType.PLCAlgorithm)
+            if spec is None:
+                return []
+
+            constrained = []
+            if spec.supported_packet_sizes is not None:
+                constrained.append(
+                    (location, module_name, spec.supported_packet_sizes)
+                )
+
+            values = setting_values(module)
+            for parameter in spec.settings:
+                if parameter.type != "dict_str_list_PLCSettings":
+                    continue
+                nested_by_channel = values.get(parameter.name)
+                if not isinstance(nested_by_channel, dict):
+                    continue
+                for channel, nested_modules in nested_by_channel.items():
+                    if not isinstance(nested_modules, list):
+                        continue
+                    for index, nested_module in enumerate(nested_modules):
+                        nested_name = get_attr(nested_module, "name") or "UnknownPLC"
+                        nested_location = (
+                            f"{location}.{parameter.name}.{channel}[{index}].{nested_name}"
+                        )
+                        constrained.extend(
+                            constrained_plcs(nested_module, nested_location, depth + 1)
+                        )
+            return constrained
+
+        simulators: list[tuple[str, int]] = []
+        for simulator in modules.get(ModuleType.PacketLossSimulator, []):
+            packet_size = setting_values(simulator).get("packet_size")
+            if isinstance(packet_size, int) and not isinstance(packet_size, bool):
+                simulators.append((simulator.name, packet_size))
+
+        constrained_algorithms = []
+        for algorithm in modules.get(ModuleType.PLCAlgorithm, []):
+            constrained_algorithms.extend(constrained_plcs(algorithm, algorithm.name))
+
+        compatibility_errors: list[RunConfigValidationError] = []
+        seen: set[tuple[str, str, int]] = set()
+        for location, algorithm_name, supported_sizes in constrained_algorithms:
+            supported_label = ", ".join(str(size) for size in supported_sizes)
+            requirement = (
+                f"packet size {supported_label}"
+                if len(supported_sizes) == 1
+                else f"one of packet sizes {supported_label}"
+            )
+            for simulator_name, packet_size in simulators:
+                if packet_size in supported_sizes:
+                    continue
+                key = (location, simulator_name, packet_size)
+                if key in seen:
+                    continue
+                seen.add(key)
+                compatibility_errors.append(
+                    RunConfigValidationError(
+                        module_type=ModuleType.PLCAlgorithm.value,
+                        module_name=location,
+                        setting="packet_size",
+                        error=(
+                            f"{algorithm_name} supports {requirement}, but "
+                            f"{simulator_name} uses {packet_size}. Set "
+                            f"{simulator_name}.packet_size to a supported value or "
+                            f"remove {algorithm_name}."
+                        ),
+                    )
+                )
+        return compatibility_errors

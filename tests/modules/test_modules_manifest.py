@@ -1,6 +1,9 @@
+from pydantic import ValidationError
+
 from plc_platform_backend.modules.modules_models import (
     Module,
     ModuleParameter,
+    ModuleSpec,
     ModuleType,
 )
 from plc_platform_backend.modules.modules_repository import ModulesRepository
@@ -58,6 +61,24 @@ def test_whole_track_quality_calculators_are_exposed_with_supported_settings():
         (setting.name, setting.type, setting.default, setting.values)
         for setting in pesq.settings
     ] == [("pesq_mode", "Enum", "wb", ["wb", "nb"])]
+
+
+def test_packet_size_restricted_algorithms_are_exposed():
+    modules = ModulesRepository().get_all_modules_by_type(ModuleType.PLCAlgorithm)
+    by_name = {module.name: module for module in modules}
+
+    assert by_name["VermaPLC"].supported_packet_sizes == [128]
+    assert by_name["PARCnetPLC"].supported_packet_sizes == [512]
+    assert by_name["ZerosPLC"].supported_packet_sizes is None
+
+
+def test_supported_packet_sizes_must_be_non_empty_positive_and_unique():
+    for packet_sizes in ([], [0], [-1], [128, 128]):
+        try:
+            ModuleSpec(name="RestrictedPLC", settings=[], supported_packet_sizes=packet_sizes)
+        except ValidationError:
+            continue
+        raise AssertionError(f"Expected {packet_sizes} to be rejected")
 
 
 def test_whole_track_quality_calculator_settings_are_validated():

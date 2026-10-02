@@ -55,6 +55,7 @@ class ModulesRepository:
                     name=module["name"],
                     settings=self._parse_settings(module),
                     constraints=module.get("constraints") or [],
+                    supported_packet_sizes=module.get("supported_packet_sizes"),
                 )
             )
 
@@ -64,6 +65,8 @@ class ModulesRepository:
                     ModuleSpec(
                         name=module["name"],
                         settings=self._parse_settings(module),
+                        constraints=module.get("constraints") or [],
+                        supported_packet_sizes=module.get("supported_packet_sizes"),
                         is_plugin=True,
                     )
                 )
