@@ -37,6 +37,7 @@ from plc_platform_backend.runs.runs_service import (
     RunArtifactsUnavailableError,
     RunNotDeletableError,
     RunNotExecutableError,
+    RunNotRetryableError,
     RunQueueError,
     RunsService,
     _build_testbench_from_config,
@@ -561,6 +562,47 @@ class RunsServiceLifecycleTests(IsolatedAsyncioTestCase):
         self.service.runs_repository.create_run.assert_awaited_once_with(create_dto)
         send.assert_not_called()
         self.assertEqual(saved.status, RunStatus.CREATED)
+
+    async def test_retry_clones_failed_run_and_queues_new_attempt(self) -> None:
+        failed_run = Run.from_document(make_run_document(RunStatus.FAILED))
+        failed_run.modules[ModuleType.PacketLossSimulator] = [
+            Module(name="PLS", node_ids=["old-node"], settings=[])
+        ]
+        saved_run = Run.from_document(make_run_document(RunStatus.CREATED))
+        queued_run = Run.from_document(make_run_document(RunStatus.QUEUED))
+        self.service.find_by_id.return_value = failed_run
+        self.service.validate_run_create = AsyncMock(return_value=[])
+        self.service.save_run = AsyncMock(return_value=saved_run)
+        self.service.execute_run = AsyncMock(return_value=queued_run)
+
+        result = await self.service.retry_run(failed_run.id, SimpleNamespace())
+
+        retry_dto = self.service.save_run.await_args.args[0]
+        self.assertEqual(retry_dto.name, f"{failed_run.name} (retry)")
+        self.assertEqual(
+            retry_dto.modules[ModuleType.PacketLossSimulator][0].node_ids, []
+        )
+        self.service.execute_run.assert_awaited_once_with(saved_run.id)
+        self.assertEqual(result.status, RunStatus.QUEUED)
+
+    async def test_retry_rejects_non_failed_run(self) -> None:
+        self.service.find_by_id.return_value = Run.from_document(make_run_document())
+
+        with self.assertRaises(RunNotRetryableError):
+            await self.service.retry_run("run-id", SimpleNamespace())
+
+    async def test_retry_queue_error_exposes_saved_run_id(self) -> None:
+        failed_run = Run.from_document(make_run_document(RunStatus.FAILED))
+        saved_run = Run.from_document(make_run_document(RunStatus.CREATED))
+        self.service.find_by_id.return_value = failed_run
+        self.service.validate_run_create = AsyncMock(return_value=[])
+        self.service.save_run = AsyncMock(return_value=saved_run)
+        self.service.execute_run = AsyncMock(side_effect=RunQueueError("offline"))
+
+        with self.assertRaises(RunQueueError) as context:
+            await self.service.retry_run(failed_run.id, SimpleNamespace())
+
+        self.assertEqual(context.exception.run_id, saved_run.id)
 
     async def test_execute_queues_a_prepared_created_run(self) -> None:
         created_run = Run.from_document(make_run_document())

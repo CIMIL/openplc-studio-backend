@@ -27,6 +27,7 @@ from plc_platform_backend.runs.runs_service import (
     RunArtifactsUnavailableError,
     RunNotDeletableError,
     RunNotExecutableError,
+    RunNotRetryableError,
     RunPreparationError,
     RunQueueError,
     RunsService,
@@ -71,6 +72,27 @@ async def create_run(
         return await runs_service.save_run(run)
     except RunPreparationError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/{run_id}/retry", status_code=202)
+async def retry_run(
+    run_id: str,
+    runs_service: Annotated[RunsService, Depends(get_runs_service)],
+    modules_service: Annotated[ModuleService, Depends(get_modules_service)],
+) -> Run:
+    try:
+        return await runs_service.retry_run(run_id, modules_service)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except RunNotRetryableError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except RunPreparationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except RunQueueError as error:
+        detail: str | dict[str, str] = str(error)
+        if error.run_id:
+            detail = {"message": str(error), "run_id": error.run_id}
+        raise HTTPException(status_code=503, detail=detail) from error
 
 
 @router.post("/{run_id}/execute", status_code=202)

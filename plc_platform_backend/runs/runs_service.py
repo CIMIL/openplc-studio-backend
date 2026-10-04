@@ -105,8 +105,14 @@ class RunNotExecutableError(Exception):
     pass
 
 
-class RunQueueError(Exception):
+class RunNotRetryableError(Exception):
     pass
+
+
+class RunQueueError(Exception):
+    def __init__(self, message: str, run_id: str | None = None) -> None:
+        super().__init__(message)
+        self.run_id = run_id
 
 
 class RunPreparationError(Exception):
@@ -605,6 +611,49 @@ class RunsService:
 
         saved_run = await self.runs_repository.create_run(run)
         return Run.from_document(saved_run)
+
+    async def retry_run(
+        self, run_id: str, modules_service: ModuleService
+    ) -> Run:
+        source = await self.find_by_id(run_id)
+        if source.status != RunStatus.FAILED:
+            raise RunNotRetryableError(
+                f"Run {run_id} cannot be retried while its status is {source.status.value}"
+            )
+
+        retry = RunCreateDto(
+            author=source.author,
+            name=f"{source.name} (retry)",
+            tracks=list(source.tracks),
+            modules={
+                module_type: [
+                    Module(
+                        name=module.name,
+                        settings=[
+                            ModuleParameter(name=setting.name, value=setting.value)
+                            for setting in module.settings
+                        ],
+                    )
+                    for module in modules
+                ]
+                for module_type, modules in source.modules.items()
+            },
+        )
+        errors = await self.validate_run_create(retry, modules_service)
+        if errors:
+            raise RunPreparationError(
+                "; ".join(
+                    f"{error.module_name}"
+                    f"{'.' + error.setting if error.setting else ''}: {error.error}"
+                    for error in errors
+                )
+            )
+
+        saved = await self.save_run(retry)
+        try:
+            return await self.execute_run(saved.id)
+        except RunQueueError as error:
+            raise RunQueueError(str(error), run_id=saved.id) from error
 
     async def execute_run(self, run_id: str) -> Run:
         run = await self.find_by_id(run_id)
